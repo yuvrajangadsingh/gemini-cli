@@ -224,9 +224,12 @@ describe('useGitBranchName', () => {
 
   it('should cleanup watcher on unmount', async () => {
     const closeMock = vi.fn();
-    const watchMock = vi.spyOn(fs, 'watch').mockReturnValue({
-      close: closeMock,
-    } as unknown as FSWatcher);
+    const watchMock = vi.spyOn(fs, 'watch').mockImplementation((_path, callback) => {
+      // Store callback like the other test does (even though we don't use it here)
+      return {
+        close: closeMock,
+      } as unknown as FSWatcher;
+    });
 
     (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
       (_command, _options, callback) => {
@@ -244,14 +247,21 @@ describe('useGitBranchName', () => {
 
     expect(result.current).toBe('main');
 
+    // Wait for async watcher setup to complete
+    await act(async () => {
+      await vi.waitFor(() => {
+        expect(watchMock).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    // Verify that the watcher was created with correct parameters
+    expect(watchMock).toHaveBeenCalledWith(GIT_LOGS_HEAD_PATH, expect.any(Function));
+    
     // Unmount and verify cleanup function calls close()
     // This is the critical test - ensuring the watcher is properly cleaned up
     unmount();
     
-    // If a watcher was created, its close method should be called during cleanup
-    // This verifies the useEffect cleanup function works correctly
-    if (watchMock.mock.calls.length > 0) {
-      expect(closeMock).toHaveBeenCalled();
-    }
+    // Verify that the watcher's close method was called on unmount
+    expect(closeMock).toHaveBeenCalledTimes(1);
   });
 });
