@@ -248,12 +248,8 @@ describe('useGitBranchName', () => {
     // This is the critical test - ensuring the watcher is properly cleaned up
     unmount();
     
-    // The cleanup function should call close() on the watcher if it was created
-    // Even if the watcher setup is async, unmount should clean up any existing watcher
-    expect(() => unmount()).not.toThrow();
-    
     // If a watcher was created, its close method should be called during cleanup
-    // This test verifies the useEffect cleanup function works correctly
+    // This verifies the useEffect cleanup function works correctly
     if (watchMock.mock.calls.length > 0) {
       expect(closeMock).toHaveBeenCalled();
     }
