@@ -162,7 +162,7 @@ describe('useGitBranchName', () => {
     // This verifies the callback mechanism works correctly
     if (watchCallback) {
       await act(async () => {
-        watchCallback('change');
+        watchCallback?.('change');
         vi.runAllTimers();
         rerender();
       });
