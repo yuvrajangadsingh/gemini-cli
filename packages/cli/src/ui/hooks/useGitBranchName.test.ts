@@ -224,12 +224,12 @@ describe('useGitBranchName', () => {
 
   it('should cleanup watcher on unmount', async () => {
     const closeMock = vi.fn();
-    const watchMock = vi.spyOn(fs, 'watch').mockImplementation((_path, callback) => {
+    const watchMock = vi.spyOn(fs, 'watch').mockImplementation((_path, _callback) => 
       // Store callback like the other test does (even though we don't use it here)
-      return {
+       ({
         close: closeMock,
-      } as unknown as FSWatcher;
-    });
+      } as unknown as FSWatcher)
+    );
 
     (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
       (_command, _options, callback) => {
