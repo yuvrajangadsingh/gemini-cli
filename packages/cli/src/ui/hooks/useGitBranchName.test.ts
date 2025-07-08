@@ -139,7 +139,6 @@ describe('useGitBranchName', () => {
       } as unknown as FSWatcher;
     });
 
-
     let callCount = 0;
     (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
       (_command, _options, callback) => {
@@ -223,7 +222,7 @@ describe('useGitBranchName', () => {
     // The watcher setup is async and depends on file existence, but cleanup should always work
     const closeMock = vi.fn();
     let watcherCreated = false;
-    
+
     vi.spyOn(fs, 'watch').mockImplementation((_path, _callback) => {
       watcherCreated = true;
       return {
@@ -256,7 +255,7 @@ describe('useGitBranchName', () => {
     if (watcherCreated) {
       expect(closeMock).toHaveBeenCalledTimes(1);
     }
-    
+
     // Test passes if we reach here - unmount completed without errors
   });
 });
