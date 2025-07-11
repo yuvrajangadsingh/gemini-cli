@@ -110,7 +110,7 @@ describe('GitService', () => {
     // Make env return the git instance for chaining
     hoistedMockEnv.mockReturnValue(gitInstance);
 
-    // Make simpleGit return the git instance
+    // Make simpleGit return the git instance for all calls
     hoistedMockSimpleGit.mockReturnValue(gitInstance);
 
     hoistedMockCheckIsRepo.mockResolvedValue(false);
@@ -201,13 +201,12 @@ describe('GitService', () => {
       const service = new GitService(mockProjectRoot);
       await service.setupShadowGitRepository();
 
-      // Verify that simpleGit was called with the repo directory
-      expect(hoistedMockSimpleGit).toHaveBeenCalledWith(repoDir);
-
-      // Verify that env() was called with isolation settings
-      expect(hoistedMockEnv).toHaveBeenCalledWith({
-        HOME: repoDir,
-        XDG_CONFIG_HOME: repoDir,
+      // Verify that simpleGit was called with the repo directory and isolation settings
+      expect(hoistedMockSimpleGit).toHaveBeenCalledWith(repoDir, {
+        env: {
+          HOME: repoDir,
+          XDG_CONFIG_HOME: repoDir,
+        },
       });
 
       // Verify that subsequent git operations used the isolated instance
@@ -228,7 +227,12 @@ describe('GitService', () => {
       hoistedMockCheckIsRepo.mockResolvedValue(false);
       const service = new GitService(mockProjectRoot);
       await service.setupShadowGitRepository();
-      expect(hoistedMockSimpleGit).toHaveBeenCalledWith(repoDir);
+      expect(hoistedMockSimpleGit).toHaveBeenCalledWith(repoDir, {
+        env: {
+          HOME: repoDir,
+          XDG_CONFIG_HOME: repoDir,
+        },
+      });
       expect(hoistedMockInit).toHaveBeenCalled();
     });
 
@@ -311,7 +315,7 @@ describe('GitService', () => {
       // Verify simpleGit was called with the correct directory
       expect(hoistedMockSimpleGit).toHaveBeenCalledWith(mockProjectRoot);
 
-      // Verify env was called with the correct isolation settings
+      // Verify env was called with the correct isolation settings for shadowGitRepository
       expect(hoistedMockEnv).toHaveBeenCalledWith({
         GIT_DIR: path.join(repoDir, '.git'),
         GIT_WORK_TREE: mockProjectRoot,
