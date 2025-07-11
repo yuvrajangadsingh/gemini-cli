@@ -86,10 +86,9 @@ describe('useGitBranchName', () => {
     // Initial state should be undefined
     expect(result.current).toBeUndefined();
     
-    // Wait a bit to ensure the error callback has been called
-    await new Promise(resolve => setTimeout(resolve, 10));
-    
-    // Should still be undefined after error
+    await waitFor(() => {
+      expect((mockExec as MockedFunction<typeof mockExec>).mock.calls).toHaveLength(1);
+    });
     expect(result.current).toBeUndefined();
   });
 
