@@ -299,7 +299,7 @@ describe('GitService', () => {
 
     it('should configure environment variables to isolate git config', async () => {
       const service = new GitService(mockProjectRoot);
-      await service.setupShadowGitRepository();
+      await service.getCurrentCommitHash();
 
       // Clear mock history to isolate the test of shadowGitRepository getter
       hoistedMockSimpleGit.mockClear();
