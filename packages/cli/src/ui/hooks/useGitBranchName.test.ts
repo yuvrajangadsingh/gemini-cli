@@ -30,9 +30,10 @@ vi.mock('node:fs', async () => {
   return memfs.fs;
 });
 
-vi.mock('node:fs/promises', () => ({
-  access: vi.fn().mockResolvedValue(undefined), // Mock access to always succeed
-}));
+vi.mock('node:fs/promises', async () => {
+  const memfs = await vi.importActual<typeof import('memfs')>('memfs');
+  return memfs.fs.promises;
+});
 
 const CWD = '/test/project';
 const GIT_HEAD_PATH = `${CWD}/.git/HEAD`;
