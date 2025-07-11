@@ -215,20 +215,16 @@ export async function retryWithBackoff<T>(
     }
   }
 
-  // Check if we exceeded total attempts limit (including fallbacks)
+// If we exited the loop, throw the last captured error.
+if (lastError) {
+  // If we exited due to the total attempts circuit breaker, add a warning.
   if (totalAttempts >= maxAttempts * 2) {
     console.warn(
-      `Retry loop stopped after ${totalAttempts} total attempts (including fallbacks) to prevent infinite loops. Max attempts: ${maxAttempts}`,
-    );
-    throw new Error(
-      `Retry attempts exhausted after ${totalAttempts} total attempts (including fallbacks). This may indicate an infinite retry loop.`,
+      `Retry loop stopped after ${totalAttempts} total attempts (including fallbacks) to prevent infinite loops. Max attempts: ${maxAttempts}. Throwing last received error.`,
     );
   }
-
-  // If we exit the loop due to maxAttempts or shouldRetry returning false, throw the last error
-  if (lastError) {
-    throw lastError;
-  }
+  throw lastError;
+}
 
   // This line should theoretically be unreachable, but added for type safety
   throw new Error('Retry attempts exhausted');
