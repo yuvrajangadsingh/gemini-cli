@@ -296,11 +296,11 @@ describe('GitService', () => {
 
   describe('shadowGitRepository', () => {
     const repoDir = path.join(mockHomedir, '.gemini', 'history', mockHash);
-    
+
     it('should configure environment variables to isolate git config', async () => {
       const service = new GitService(mockProjectRoot);
       await service.setupShadowGitRepository();
-      
+
       // Clear mock history to isolate the test of shadowGitRepository getter
       hoistedMockSimpleGit.mockClear();
       hoistedMockEnv.mockClear();
@@ -310,7 +310,7 @@ describe('GitService', () => {
 
       // Verify simpleGit was called with the correct directory
       expect(hoistedMockSimpleGit).toHaveBeenCalledWith(mockProjectRoot);
-      
+
       // Verify env was called with the correct isolation settings
       expect(hoistedMockEnv).toHaveBeenCalledWith({
         GIT_DIR: path.join(repoDir, '.git'),
