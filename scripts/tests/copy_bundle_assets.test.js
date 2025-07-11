@@ -40,8 +40,12 @@ describe('copy_bundle_assets', () => {
     });
 
     // Check that the backwards compatibility files were created
-    expect(existsSync(join(testBundleDir, 'sandbox-macos-minimal.sb'))).toBe(true);
-    expect(existsSync(join(testBundleDir, 'sandbox-macos-strict.sb'))).toBe(true);
+    expect(existsSync(join(testBundleDir, 'sandbox-macos-minimal.sb'))).toBe(
+      true,
+    );
+    expect(existsSync(join(testBundleDir, 'sandbox-macos-strict.sb'))).toBe(
+      true,
+    );
 
     // Also check that the new files exist
     expect(
