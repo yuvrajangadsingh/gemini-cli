@@ -14,10 +14,18 @@ import { useShellHistory } from '../hooks/useShellHistory.js';
 import { useCompletion } from '../hooks/useCompletion.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import chalk from 'chalk';
 
 vi.mock('../hooks/useShellHistory.js');
 vi.mock('../hooks/useCompletion.js');
 vi.mock('../hooks/useInputHistory.js');
+
+// Mock chalk.inverse to make highlighting detectable in plain text output
+vi.mock('chalk', () => ({
+  default: {
+    inverse: vi.fn((text: string) => `[${text}]`), // Wrap the character in brackets
+  },
+}));
 
 type MockedUseShellHistory = ReturnType<typeof useShellHistory>;
 type MockedUseCompletion = ReturnType<typeof useCompletion>;
@@ -240,18 +248,17 @@ describe('InputPrompt', () => {
       const unfocusedOutput = unfocusedFrame();
       unmount2();
       
-      // Both should contain the base text
-      expect(focusedOutput).toContain('test');
+      // Both should contain the base text, but focused output should show the mocked highlight
+      expect(focusedOutput).toContain('t[e]st'); // Assuming cursor on 'e' in 'test'
       expect(unfocusedOutput).toContain('test');
-      
-      // The outputs should be defined and non-empty
+      expect(unfocusedOutput).not.toContain('t[e]st'); // Ensure unfocused doesn't have the highlight
+      expect(focusedOutput).not.toEqual(unfocusedOutput); // Crucial: outputs must be different
+
+      // The outputs should be defined and non-empty (keep these if desired, but the above are more specific)
       expect(focusedOutput).toBeDefined();
       expect(unfocusedOutput).toBeDefined();
       expect(focusedOutput?.length).toBeGreaterThan(0);
       expect(unfocusedOutput?.length).toBeGreaterThan(0);
-      
-      // While we can't test the exact ANSI codes due to test environment limitations,
-      // we ensure both states render successfully which validates the focus condition fix
     });
 
     it('should handle placeholder rendering with focus states', async () => {
@@ -275,9 +282,10 @@ describe('InputPrompt', () => {
       const unfocusedOutput = unfocusedFrame();
       unmount2();
       
-      // Validate that both contain the placeholder text
-      expect(focusedOutput).toContain('Type here');
+      // Validate that both contain the placeholder text (with mocked highlighting for focused)
+      expect(focusedOutput).toContain('[T]ype here'); // First character highlighted when focused
       expect(unfocusedOutput).toContain('Type here');
+      expect(unfocusedOutput).not.toContain('[T]ype here');
       
       // Validate both states render successfully 
       expect(focusedOutput).toBeDefined();
@@ -307,9 +315,10 @@ describe('InputPrompt', () => {
       const unfocusedOutput = unfocusedFrame();
       unmount2();
 
-      // Both should contain the text
-      expect(focusedOutput).toContain('test');
+      // Both should contain the text, but focused should have highlighting
+      expect(focusedOutput).toContain('t[e]st'); // Cursor on 'e' should be highlighted
       expect(unfocusedOutput).toContain('test');
+      expect(unfocusedOutput).not.toContain('t[e]st');
     });
 
     it('should not crash when focus changes during rendering', async () => {
@@ -323,7 +332,7 @@ describe('InputPrompt', () => {
       await wait();
       
       const initialOutput = lastFrame();
-      expect(initialOutput).toContain('hello world');
+      expect(initialOutput).toContain('hello[ ]world'); // Space is highlighted when focused
       
       // Change focus and re-render
       props.focus = false;
@@ -366,9 +375,10 @@ describe('InputPrompt', () => {
       unmount();
       
       // All states should render the text content
-      expect(focusedOutput).toContain('hello world');
+      expect(focusedOutput).toContain('hello[ ]world'); // Space highlighted when focused
       expect(unfocusedOutput).toContain('hello world');
-      expect(refocusedOutput).toContain('hello world');
+      expect(unfocusedOutput).not.toContain('hello[ ]world'); // No highlighting when unfocused
+      expect(refocusedOutput).toContain('hello[ ]world'); // Space highlighted again when refocused
       
       // Ensure no crashes during focus transitions
       expect(focusedOutput).toBeDefined();
