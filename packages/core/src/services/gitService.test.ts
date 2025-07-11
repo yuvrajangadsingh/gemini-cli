@@ -278,4 +278,27 @@ describe('GitService', () => {
       expect(hoistedMockCommit).not.toHaveBeenCalled();
     });
   });
+
+  describe('shadowGitRepository', () => {
+    it('should configure environment variables to isolate git config', async () => {
+      const service = new GitService(mockProjectRoot);
+      await service.setupShadowGitRepository();
+
+      // Access the private shadowGitRepository getter via a method that uses it
+      await service.getCurrentCommitHash();
+
+      const expectedRepoDir = path.join(
+        mockHomedir,
+        '.gemini',
+        'history',
+        mockHash,
+      );
+      expect(hoistedMockEnv).toHaveBeenCalledWith({
+        GIT_DIR: path.join(expectedRepoDir, '.git'),
+        GIT_WORK_TREE: mockProjectRoot,
+        HOME: expectedRepoDir,
+        XDG_CONFIG_HOME: expectedRepoDir,
+      });
+    });
+  });
 });
