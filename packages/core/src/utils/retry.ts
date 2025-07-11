@@ -87,11 +87,13 @@ export async function retryWithBackoff<T>(
   };
 
   let attempt = 0;
+  let totalAttempts = 0; // Track total attempts including fallbacks to prevent infinite loops
   let currentDelay = initialDelayMs;
   let consecutive429Count = 0;
 
-  while (attempt < maxAttempts) {
+  while (attempt < maxAttempts && totalAttempts < maxAttempts * 2) {
     attempt++;
+    totalAttempts++;
     try {
       return await fn();
     } catch (error) {
@@ -210,6 +212,17 @@ export async function retryWithBackoff<T>(
       }
     }
   }
+
+  // Check if we exceeded total attempts limit (including fallbacks)
+  if (totalAttempts >= maxAttempts * 2) {
+    console.warn(
+      `Retry loop stopped after ${totalAttempts} total attempts (including fallbacks) to prevent infinite loops. Max attempts: ${maxAttempts}`,
+    );
+    throw new Error(
+      `Retry attempts exhausted after ${totalAttempts} total attempts (including fallbacks). This may indicate an infinite retry loop.`,
+    );
+  }
+
   // This line should theoretically be unreachable due to the throw in the catch block.
   // Added for type safety and to satisfy the compiler that a promise is always returned.
   throw new Error('Retry attempts exhausted');
