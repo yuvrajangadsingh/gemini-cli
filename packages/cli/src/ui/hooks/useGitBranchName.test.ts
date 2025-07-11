@@ -129,9 +129,9 @@ describe('useGitBranchName', () => {
 
     const { result } = renderHook(() => useGitBranchName(CWD));
     
-    // Wait a bit for both exec calls to complete
-    await new Promise(resolve => setTimeout(resolve, 20));
-    
+    await waitFor(() => {
+      expect((mockExec as MockedFunction<typeof mockExec>).mock.calls).toHaveLength(2);
+    });
     expect(result.current).toBeUndefined();
   });
 
