@@ -86,6 +86,7 @@ export async function retryWithBackoff<T>(
   let totalAttempts = 0; // Track total attempts including fallbacks to prevent infinite loops
   let currentDelay = initialDelayMs;
   let consecutive429Count = 0;
+  let lastError: Error | unknown;
 
   while (attempt < maxAttempts && totalAttempts < maxAttempts * 2) {
     attempt++;
@@ -93,6 +94,7 @@ export async function retryWithBackoff<T>(
     try {
       return await fn();
     } catch (error) {
+      lastError = error;
       const errorStatus = getErrorStatus(error);
 
       // Check for Pro quota exceeded error first - immediate fallback for OAuth users
@@ -182,7 +184,7 @@ export async function retryWithBackoff<T>(
 
       // Check if we've exhausted retries or shouldn't retry
       if (attempt >= maxAttempts || !shouldRetry(error as Error)) {
-        throw error;
+        break;
       }
 
       const { delayDurationMs, errorStatus: delayErrorStatus } =
@@ -219,8 +221,12 @@ export async function retryWithBackoff<T>(
     );
   }
 
-  // This line should theoretically be unreachable due to the throw in the catch block.
-  // Added for type safety and to satisfy the compiler that a promise is always returned.
+  // If we exit the loop due to maxAttempts or shouldRetry returning false, throw the last error
+  if (lastError) {
+    throw lastError;
+  }
+
+  // This line should theoretically be unreachable, but added for type safety
   throw new Error('Retry attempts exhausted');
 }
 
