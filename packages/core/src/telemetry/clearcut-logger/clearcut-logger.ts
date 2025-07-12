@@ -185,7 +185,7 @@ export class ClearcutLogger {
         // Prevent total queue from exceeding max_events after retry
         if (this.events.length > this.max_events) {
           const excessEvents = this.events.length - this.max_events;
-          this.events.splice(this.max_retry_events, excessEvents);
+          this.events.splice(eventsToRetry.length, excessEvents);
 
           if (this.config?.getDebugMode()) {
             console.debug(
