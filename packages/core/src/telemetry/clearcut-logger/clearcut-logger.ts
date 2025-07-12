@@ -49,6 +49,7 @@ export class ClearcutLogger {
   private readonly max_events: number = 1000; // Maximum events to keep in memory
   private readonly max_retry_events: number = 100; // Maximum failed events to retry
   private last_memory_warning: number = 0; // Last time we warned about memory usage
+  private flushing: boolean = false; // Prevent concurrent flush operations
 
   private constructor(config?: Config) {
     this.config = config;
@@ -113,7 +114,10 @@ export class ClearcutLogger {
   }
 
   flushIfNeeded(): void {
-    if (Date.now() - this.last_flush_time < this.flush_interval_ms) {
+    if (
+      this.flushing ||
+      Date.now() - this.last_flush_time < this.flush_interval_ms
+    ) {
       return;
     }
 
@@ -159,6 +163,8 @@ export class ClearcutLogger {
   }
 
   async flushToClearcut(): Promise<LogResponse> {
+    this.flushing = true;
+
     if (this.config?.getDebugMode()) {
       console.log('Flushing log events to Clearcut.');
     }
@@ -225,6 +231,9 @@ export class ClearcutLogger {
         console.error('Error flushing log events:', error);
         // Return empty response to maintain the Promise<LogResponse> contract
         return {};
+      })
+      .finally(() => {
+        this.flushing = false;
       });
   }
 
