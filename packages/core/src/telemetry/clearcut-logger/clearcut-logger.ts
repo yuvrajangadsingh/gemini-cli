@@ -41,6 +41,9 @@ export class ClearcutLogger {
   private readonly events: any = [];
   private last_flush_time: number = Date.now();
   private flush_interval_ms: number = 1000 * 60; // Wait at least a minute before flushing events.
+  private readonly max_events: number = 1000; // Maximum events to keep in memory
+  private readonly max_retry_events: number = 100; // Maximum failed events to retry
+  private last_memory_warning: number = 0; // Last time we warned about memory usage
 
   private constructor(config?: Config) {
     this.config = config;
@@ -57,6 +60,19 @@ export class ClearcutLogger {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Clearcut expects this format.
   enqueueLogEvent(event: any): void {
+    // Prevent unbounded memory growth by limiting event queue size
+    if (this.events.length >= this.max_events) {
+      // Remove oldest events (FIFO) to make room for new ones
+      const eventsToRemove = this.events.length - this.max_events + 1;
+      this.events.splice(0, eventsToRemove);
+
+      if (this.config?.getDebugMode()) {
+        console.debug(
+          `ClearcutLogger: Dropped ${eventsToRemove} old events to prevent memory leak (queue size: ${this.events.length})`,
+        );
+      }
+    }
+
     this.events.push([
       {
         event_time_ms: Date.now(),
@@ -80,10 +96,45 @@ export class ClearcutLogger {
       return;
     }
 
+    // Check for potential memory pressure and warn if needed
+    this.checkMemoryPressure();
+
     // Fire and forget - don't await
     this.flushToClearcut().catch((error) => {
       console.debug('Error flushing to Clearcut:', error);
     });
+  }
+
+  private checkMemoryPressure(): void {
+    const now = Date.now();
+    const memoryWarningInterval = 5 * 60 * 1000; // Warn at most every 5 minutes
+
+    if (now - this.last_memory_warning < memoryWarningInterval) {
+      return;
+    }
+
+    // Check event queue size
+    if (this.events.length > this.max_events * 0.8) {
+      console.warn(
+        `ClearcutLogger: Event queue is ${Math.round((this.events.length / this.max_events) * 100)}% full (${this.events.length}/${this.max_events}). Consider increasing flush frequency.`,
+      );
+      this.last_memory_warning = now;
+    }
+
+    // Check system memory if available
+    if (process.memoryUsage) {
+      const memUsage = process.memoryUsage();
+      const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+      const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+
+      if (heapUsedMB > 512) {
+        // Warn if heap usage exceeds 512MB
+        console.warn(
+          `ClearcutLogger: High memory usage detected - Heap: ${heapUsedMB}MB/${heapTotalMB}MB, RSS: ${Math.round(memUsage.rss / 1024 / 1024)}MB`,
+        );
+        this.last_memory_warning = now;
+      }
+    }
   }
 
   async flushToClearcut(): Promise<LogResponse> {
@@ -127,8 +178,22 @@ export class ClearcutLogger {
         if (this.config?.getDebugMode()) {
           console.log('Clearcut POST request error: ', e);
         }
-        // Add the events back to the front of the queue to be retried.
-        this.events.unshift(...eventsToSend);
+        // Add the events back to the front of the queue to be retried, but limit retry queue size
+        const eventsToRetry = eventsToSend.slice(-this.max_retry_events); // Keep only the most recent events
+        this.events.unshift(...eventsToRetry);
+
+        // Prevent total queue from exceeding max_events after retry
+        if (this.events.length > this.max_events) {
+          const excessEvents = this.events.length - this.max_events;
+          this.events.splice(this.max_retry_events, excessEvents);
+
+          if (this.config?.getDebugMode()) {
+            console.debug(
+              `ClearcutLogger: Dropped ${excessEvents} events after failed retry to prevent memory leak`,
+            );
+          }
+        }
+
         reject(e);
       });
       req.end(body);
