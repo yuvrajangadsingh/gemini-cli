@@ -84,6 +84,40 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
     );
   }
 
+  /**
+   * Helper method to execute a Gemini API call with timeout handling
+   */
+  private async executeWithTimeout<T>(
+    operation: (signal: AbortSignal) => Promise<T>,
+    signal: AbortSignal,
+    errorContext: string,
+  ): Promise<T> {
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      timeoutController.abort();
+    }, GEMINI_API_TIMEOUT_MS);
+
+    // Combine the original signal with the timeout signal
+    const combinedSignal = signal.aborted
+      ? signal
+      : AbortSignal.any([signal, timeoutController.signal]);
+
+    try {
+      const result = await operation(combinedSignal);
+      clearTimeout(timeoutId);
+      return result;
+    } catch (innerError: unknown) {
+      clearTimeout(timeoutId);
+      // Check if it was a timeout error (not user cancellation)
+      if (isNodeError(innerError) && innerError.name === 'AbortError' && timeoutController.signal.aborted) {
+        const timeoutMessage = `Request timed out after ${GEMINI_API_TIMEOUT_MS}ms ${errorContext}`;
+        console.warn(timeoutMessage);
+        throw new Error(timeoutMessage);
+      }
+      throw innerError;
+    }
+  }
+
   private async executeFallback(
     params: WebFetchToolParams,
     signal: AbortSignal,
@@ -130,42 +164,30 @@ I was unable to access the URL directly. Instead, I have fetched the raw content
 ${textContent}
 ---`;
 
-      // Create a timeout controller for the fallback Gemini API call
-      const timeoutController = new AbortController();
-      const timeoutId = setTimeout(() => {
-        timeoutController.abort();
-      }, GEMINI_API_TIMEOUT_MS);
-
-      // Combine the original signal with the timeout signal
-      const combinedSignal = signal.aborted
-        ? signal
-        : AbortSignal.any([signal, timeoutController.signal]);
-
       try {
-        const result = await geminiClient.generateContent(
-          [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
-          {},
-          combinedSignal,
+        const result = await this.executeWithTimeout(
+          (combinedSignal) => geminiClient.generateContent(
+            [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
+            {},
+            combinedSignal,
+          ),
+          signal,
+          `while processing URL: ${url}`,
         );
-
-        clearTimeout(timeoutId);
+        
         const resultText = getResponseText(result) || '';
         return {
           llmContent: resultText,
           returnDisplay: `Content for ${url} processed using fallback fetch.`,
         };
-      } catch (innerError: unknown) {
-        clearTimeout(timeoutId);
-        // Check if it was a timeout error
-        if (isNodeError(innerError) && innerError.name === 'AbortError') {
-          const timeoutMessage = `Request timed out after ${GEMINI_API_TIMEOUT_MS}ms while processing URL: ${url}`;
-          console.warn(timeoutMessage);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('timed out')) {
           return {
-            llmContent: `Error: ${timeoutMessage}`,
-            returnDisplay: `Error: ${timeoutMessage}`,
+            llmContent: `Error: ${error.message}`,
+            returnDisplay: `Error: ${error.message}`,
           };
         }
-        throw innerError;
+        throw error;
       }
     } catch (e) {
       const error = e as Error;
@@ -263,33 +285,23 @@ ${textContent}
     const geminiClient = this.config.getGeminiClient();
 
     try {
-      // Create a timeout controller for the Gemini API call
-      const timeoutController = new AbortController();
-      const timeoutId = setTimeout(() => {
-        timeoutController.abort();
-      }, GEMINI_API_TIMEOUT_MS);
-
-      // Combine the original signal with the timeout signal
-      const combinedSignal = signal.aborted
-        ? signal
-        : AbortSignal.any([signal, timeoutController.signal]);
-
-      try {
-        const response = await geminiClient.generateContent(
+      const response = await this.executeWithTimeout(
+        (combinedSignal) => geminiClient.generateContent(
           [{ role: 'user', parts: [{ text: userPrompt }] }],
           { tools: [{ urlContext: {} }] },
           combinedSignal,
-        );
+        ),
+        signal,
+        `for URL: ${url}`,
+      );
 
-        clearTimeout(timeoutId);
-
-        console.debug(
-          `[WebFetchTool] Full response for prompt "${userPrompt.substring(
-            0,
-            50,
-          )}...":`,
-          JSON.stringify(response, null, 2),
-        );
+      console.debug(
+        `[WebFetchTool] Full response for prompt "${userPrompt.substring(
+          0,
+          50,
+        )}...":`,
+        JSON.stringify(response, null, 2),
+      );
 
         let responseText = getResponseText(response) || '';
         const urlContextMeta = response.candidates?.[0]?.urlContextMetadata;
@@ -377,23 +389,17 @@ ${sourceListFormatted.join('\n')}`;
           llmContent,
         );
 
-        return {
-          llmContent,
-          returnDisplay: `Content processed from prompt.`,
-        };
-      } catch (innerError: unknown) {
-        clearTimeout(timeoutId);
-        // Check if it was a timeout error
-        if (isNodeError(innerError) && innerError.name === 'AbortError') {
-          console.warn(
-            `Gemini API call timed out after ${GEMINI_API_TIMEOUT_MS}ms for URL: ${url}`,
-          );
-          // Fall back to direct fetch
-          return this.executeFallback(params, signal);
-        }
-        throw innerError;
-      }
+      return {
+        llmContent,
+        returnDisplay: `Content processed from prompt.`,
+      };
     } catch (error: unknown) {
+      // Check if it was a timeout error
+      if (error instanceof Error && error.message.includes('timed out')) {
+        // Fall back to direct fetch on timeout
+        return this.executeFallback(params, signal);
+      }
+      
       const errorMessage = `Error processing web content for prompt "${userPrompt.substring(
         0,
         50,
