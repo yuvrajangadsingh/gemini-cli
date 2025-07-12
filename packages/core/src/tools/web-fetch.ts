@@ -109,7 +109,11 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
     } catch (innerError: unknown) {
       clearTimeout(timeoutId);
       // Check if it was a timeout error (not user cancellation)
-      if (isNodeError(innerError) && innerError.name === 'AbortError' && timeoutController.signal.aborted) {
+      if (
+        isNodeError(innerError) &&
+        innerError.name === 'AbortError' &&
+        timeoutController.signal.aborted
+      ) {
         const timeoutMessage = `Request timed out after ${GEMINI_API_TIMEOUT_MS}ms ${errorContext}`;
         console.warn(timeoutMessage);
         throw new TimeoutError(timeoutMessage);
@@ -166,15 +170,16 @@ ${textContent}
 
       try {
         const result = await this.executeWithTimeout(
-          (combinedSignal) => geminiClient.generateContent(
-            [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
-            {},
-            combinedSignal,
-          ),
+          (combinedSignal) =>
+            geminiClient.generateContent(
+              [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
+              {},
+              combinedSignal,
+            ),
           signal,
           `while processing URL: ${url}`,
         );
-        
+
         const resultText = getResponseText(result) || '';
         return {
           llmContent: resultText,
@@ -286,11 +291,12 @@ ${textContent}
 
     try {
       const response = await this.executeWithTimeout(
-        (combinedSignal) => geminiClient.generateContent(
-          [{ role: 'user', parts: [{ text: userPrompt }] }],
-          { tools: [{ urlContext: {} }] },
-          combinedSignal,
-        ),
+        (combinedSignal) =>
+          geminiClient.generateContent(
+            [{ role: 'user', parts: [{ text: userPrompt }] }],
+            { tools: [{ urlContext: {} }] },
+            combinedSignal,
+          ),
         signal,
         `for URL: ${url}`,
       );
@@ -303,91 +309,91 @@ ${textContent}
         JSON.stringify(response, null, 2),
       );
 
-        let responseText = getResponseText(response) || '';
-        const urlContextMeta = response.candidates?.[0]?.urlContextMetadata;
-        const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
-        const sources = groundingMetadata?.groundingChunks as
-          | GroundingChunkItem[]
-          | undefined;
-        const groundingSupports = groundingMetadata?.groundingSupports as
-          | GroundingSupportItem[]
-          | undefined;
+      let responseText = getResponseText(response) || '';
+      const urlContextMeta = response.candidates?.[0]?.urlContextMetadata;
+      const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+      const sources = groundingMetadata?.groundingChunks as
+        | GroundingChunkItem[]
+        | undefined;
+      const groundingSupports = groundingMetadata?.groundingSupports as
+        | GroundingSupportItem[]
+        | undefined;
 
-        // Error Handling
-        let processingError = false;
+      // Error Handling
+      let processingError = false;
 
-        if (
-          urlContextMeta?.urlMetadata &&
-          urlContextMeta.urlMetadata.length > 0
-        ) {
-          const allStatuses = urlContextMeta.urlMetadata.map(
-            (m) => m.urlRetrievalStatus,
-          );
-          if (allStatuses.every((s) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS')) {
-            processingError = true;
-          }
-        } else if (!responseText.trim() && !sources?.length) {
-          // No URL metadata and no content/sources
+      if (
+        urlContextMeta?.urlMetadata &&
+        urlContextMeta.urlMetadata.length > 0
+      ) {
+        const allStatuses = urlContextMeta.urlMetadata.map(
+          (m) => m.urlRetrievalStatus,
+        );
+        if (allStatuses.every((s) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS')) {
           processingError = true;
         }
+      } else if (!responseText.trim() && !sources?.length) {
+        // No URL metadata and no content/sources
+        processingError = true;
+      }
 
-        if (
-          !processingError &&
-          !responseText.trim() &&
-          (!sources || sources.length === 0)
-        ) {
-          // Successfully retrieved some URL (or no specific error from urlContextMeta), but no usable text or grounding data.
-          processingError = true;
-        }
+      if (
+        !processingError &&
+        !responseText.trim() &&
+        (!sources || sources.length === 0)
+      ) {
+        // Successfully retrieved some URL (or no specific error from urlContextMeta), but no usable text or grounding data.
+        processingError = true;
+      }
 
-        if (processingError) {
-          return this.executeFallback(params, signal);
-        }
+      if (processingError) {
+        return this.executeFallback(params, signal);
+      }
 
-        const sourceListFormatted: string[] = [];
-        if (sources && sources.length > 0) {
-          sources.forEach((source: GroundingChunkItem, index: number) => {
-            const title = source.web?.title || 'Untitled';
-            const uri = source.web?.uri || 'Unknown URI'; // Fallback if URI is missing
-            sourceListFormatted.push(`[${index + 1}] ${title} (${uri})`);
+      const sourceListFormatted: string[] = [];
+      if (sources && sources.length > 0) {
+        sources.forEach((source: GroundingChunkItem, index: number) => {
+          const title = source.web?.title || 'Untitled';
+          const uri = source.web?.uri || 'Unknown URI'; // Fallback if URI is missing
+          sourceListFormatted.push(`[${index + 1}] ${title} (${uri})`);
+        });
+
+        if (groundingSupports && groundingSupports.length > 0) {
+          const insertions: Array<{ index: number; marker: string }> = [];
+          groundingSupports.forEach((support: GroundingSupportItem) => {
+            if (support.segment && support.groundingChunkIndices) {
+              const citationMarker = support.groundingChunkIndices
+                .map((chunkIndex: number) => `[${chunkIndex + 1}]`)
+                .join('');
+              insertions.push({
+                index: support.segment.endIndex,
+                marker: citationMarker,
+              });
+            }
           });
 
-          if (groundingSupports && groundingSupports.length > 0) {
-            const insertions: Array<{ index: number; marker: string }> = [];
-            groundingSupports.forEach((support: GroundingSupportItem) => {
-              if (support.segment && support.groundingChunkIndices) {
-                const citationMarker = support.groundingChunkIndices
-                  .map((chunkIndex: number) => `[${chunkIndex + 1}]`)
-                  .join('');
-                insertions.push({
-                  index: support.segment.endIndex,
-                  marker: citationMarker,
-                });
-              }
-            });
+          insertions.sort((a, b) => b.index - a.index);
+          const responseChars = responseText.split('');
+          insertions.forEach((insertion) => {
+            responseChars.splice(insertion.index, 0, insertion.marker);
+          });
+          responseText = responseChars.join('');
+        }
 
-            insertions.sort((a, b) => b.index - a.index);
-            const responseChars = responseText.split('');
-            insertions.forEach((insertion) => {
-              responseChars.splice(insertion.index, 0, insertion.marker);
-            });
-            responseText = responseChars.join('');
-          }
-
-          if (sourceListFormatted.length > 0) {
-            responseText += `
+        if (sourceListFormatted.length > 0) {
+          responseText += `
 
 Sources:
 ${sourceListFormatted.join('\n')}`;
-          }
         }
+      }
 
-        const llmContent = responseText;
+      const llmContent = responseText;
 
-        console.debug(
-          `[WebFetchTool] Formatted tool response for prompt "${userPrompt}:\n\n":`,
-          llmContent,
-        );
+      console.debug(
+        `[WebFetchTool] Formatted tool response for prompt "${userPrompt}:\n\n":`,
+        llmContent,
+      );
 
       return {
         llmContent,
@@ -399,7 +405,7 @@ ${sourceListFormatted.join('\n')}`;
         // Fall back to direct fetch on timeout
         return this.executeFallback(params, signal);
       }
-      
+
       const errorMessage = `Error processing web content for prompt "${userPrompt.substring(
         0,
         50,
