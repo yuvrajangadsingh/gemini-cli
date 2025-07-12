@@ -24,12 +24,6 @@ export function getErrorMessage(error: unknown): string {
 export class ForbiddenError extends Error {}
 export class UnauthorizedError extends Error {}
 export class BadRequestError extends Error {}
-export class TimeoutError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'TimeoutError';
-  }
-}
 
 interface ResponseData {
   error?: {

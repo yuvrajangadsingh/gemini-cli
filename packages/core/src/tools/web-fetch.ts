@@ -12,7 +12,7 @@ import {
   ToolConfirmationOutcome,
 } from './tools.js';
 import { Type } from '@google/genai';
-import { getErrorMessage, isNodeError, TimeoutError } from '../utils/errors.js';
+import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import { Config, ApprovalMode } from '../config/config.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { fetchWithTimeout, isPrivateIp } from '../utils/fetch.js';
@@ -116,7 +116,9 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
       ) {
         const timeoutMessage = `Request timed out after ${GEMINI_API_TIMEOUT_MS}ms ${errorContext}`;
         console.warn(timeoutMessage);
-        throw new TimeoutError(timeoutMessage);
+        const timeoutError = new Error(timeoutMessage);
+        timeoutError.name = 'TimeoutError';
+        throw timeoutError;
       }
       throw innerError;
     }
@@ -185,8 +187,8 @@ ${textContent}
           llmContent: resultText,
           returnDisplay: `Content for ${url} processed using fallback fetch.`,
         };
-      } catch (error) {
-        if (error instanceof TimeoutError) {
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === 'TimeoutError') {
           return {
             llmContent: `Error: ${error.message}`,
             returnDisplay: `Error: ${error.message}`,
@@ -401,7 +403,7 @@ ${sourceListFormatted.join('\n')}`;
       };
     } catch (error: unknown) {
       // Check if it was a timeout error
-      if (error instanceof TimeoutError) {
+      if (error instanceof Error && error.name === 'TimeoutError') {
         // Fall back to direct fetch on timeout
         return this.executeFallback(params, signal);
       }
