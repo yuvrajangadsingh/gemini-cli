@@ -98,9 +98,26 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
     }, GEMINI_API_TIMEOUT_MS);
 
     // Combine the original signal with the timeout signal
-    const combinedSignal = signal.aborted
-      ? signal
-      : AbortSignal.any([signal, timeoutController.signal]);
+    let combinedSignal: AbortSignal;
+    
+    if (signal.aborted) {
+      combinedSignal = signal;
+    } else if ('any' in AbortSignal && typeof AbortSignal.any === 'function') {
+      // Use AbortSignal.any if available (Node.js 20.3.0+)
+      combinedSignal = AbortSignal.any([signal, timeoutController.signal]);
+    } else {
+      // Fallback for Node.js 20.0.0 - 20.2.x
+      const combinedController = new AbortController();
+      
+      const abortHandler = () => {
+        combinedController.abort();
+      };
+      
+      signal.addEventListener('abort', abortHandler, { once: true });
+      timeoutController.signal.addEventListener('abort', abortHandler, { once: true });
+      
+      combinedSignal = combinedController.signal;
+    }
 
     try {
       const result = await operation(combinedSignal);
