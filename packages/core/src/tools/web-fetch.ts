@@ -99,7 +99,8 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
 
     // Combine the original signal with the timeout signal
     let combinedSignal: AbortSignal;
-    
+    let cleanup: (() => void) | undefined;
+
     if (signal.aborted) {
       combinedSignal = signal;
     } else if ('any' in AbortSignal && typeof AbortSignal.any === 'function') {
@@ -108,23 +109,32 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
     } else {
       // Fallback for Node.js 20.0.0 - 20.2.x
       const combinedController = new AbortController();
-      
+
       const abortHandler = () => {
         combinedController.abort();
       };
-      
+
       signal.addEventListener('abort', abortHandler, { once: true });
-      timeoutController.signal.addEventListener('abort', abortHandler, { once: true });
-      
+      timeoutController.signal.addEventListener('abort', abortHandler, {
+        once: true,
+      });
+
+      cleanup = () => {
+        signal.removeEventListener('abort', abortHandler);
+        timeoutController.signal.removeEventListener('abort', abortHandler);
+      };
+
       combinedSignal = combinedController.signal;
     }
 
     try {
       const result = await operation(combinedSignal);
       clearTimeout(timeoutId);
+      cleanup?.();
       return result;
     } catch (innerError: unknown) {
       clearTimeout(timeoutId);
+      cleanup?.();
       // Check if it was a timeout error (not user cancellation)
       if (
         isNodeError(innerError) &&
