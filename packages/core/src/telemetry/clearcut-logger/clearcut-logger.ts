@@ -175,12 +175,13 @@ export class ClearcutLogger {
               this.events.pop(); // Make space by removing the newest event from the end
             }
             this.events.unshift(eventsToRetry[i]);
-          } catch (_e) {
+          } catch (e) {
             // This can happen in a race condition with enqueueLogEvent.
             // We'll log it and drop the event to prevent crashing the retry loop.
             if (this.config?.getDebugMode()) {
               console.debug(
                 'ClearcutLogger: Dropped retry event due to race condition on full queue.',
+                e,
               );
             }
           }
