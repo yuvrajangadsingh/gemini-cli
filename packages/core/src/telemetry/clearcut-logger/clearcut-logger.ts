@@ -204,9 +204,6 @@ export class ClearcutLogger {
         console.error('Error flushing log events:', error);
         // Return empty response to maintain the Promise<LogResponse> contract
         return {};
-      })
-      .finally(() => {
-        this.flushing = false;
       });
   }
 
