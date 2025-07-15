@@ -73,10 +73,12 @@ export class ClearcutLogger {
     // FixedDeque automatically handles overflow by removing oldest elements (FIFO)
     const wasAtCapacity = this.events.size >= this.max_events;
 
-    this.events.push({
-      event_time_ms: Date.now(),
-      source_extension_json: safeJsonStringify(event),
-    });
+    this.events.push([
+      {
+        event_time_ms: Date.now(),
+        source_extension_json: safeJsonStringify(event),
+      },
+    ]);
 
     if (wasAtCapacity && this.config?.getDebugMode()) {
       console.debug(
