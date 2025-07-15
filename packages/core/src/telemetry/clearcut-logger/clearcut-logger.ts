@@ -172,8 +172,11 @@ export class ClearcutLogger {
         const eventsToRetry = eventsToSend.slice(-this.max_retry_events); // Keep only the most recent events
 
         // Add retry events to the front of the deque (O(1) operations)
-        // Since FixedDeque has a capacity limit, it will automatically handle overflow
+        // Since FixedDeque.unshift throws on overflow, we must manually manage capacity
         for (let i = eventsToRetry.length - 1; i >= 0; i--) {
+          if (this.events.size >= this.max_events) {
+            this.events.pop(); // Make space by removing the newest event from the end
+          }
           this.events.unshift(eventsToRetry[i]);
         }
 
