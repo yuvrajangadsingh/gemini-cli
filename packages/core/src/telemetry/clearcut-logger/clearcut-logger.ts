@@ -72,7 +72,7 @@ export class ClearcutLogger {
   enqueueLogEvent(event: any): void {
     // FixedDeque automatically handles overflow by removing oldest elements (FIFO)
     const wasAtCapacity = this.events.size >= this.max_events;
-    
+
     this.events.push([
       {
         event_time_ms: Date.now(),
@@ -127,7 +127,6 @@ export class ClearcutLogger {
     });
   }
 
-
   async flushToClearcut(): Promise<LogResponse> {
     this.flushing = true;
 
@@ -165,7 +164,7 @@ export class ClearcutLogger {
         }
         // Add the events back to the front of the queue to be retried, but limit retry queue size
         const eventsToRetry = eventsToSend.slice(-this.max_retry_events); // Keep only the most recent events
-        
+
         // Add retry events to the front of the deque (O(1) operations)
         // Since FixedDeque has a capacity limit, it will automatically handle overflow
         for (let i = eventsToRetry.length - 1; i >= 0; i--) {
