@@ -114,15 +114,16 @@ export class ClearcutLogger {
   }
 
   flushIfNeeded(): void {
-    this.flushing = true;
     if (
       this.flushing ||
       Date.now() - this.last_flush_time < this.flush_interval_ms
     ) {
-      Date.now() - this.last_flush_time < this.flush_interval_ms
-    ) {
       return;
     }
+
+    // Set the flag before initiating the async flush operation
+    // to prevent concurrent calls from starting another flush
+    this.flushing = true;
 
     // Fire and forget - don't await
     this.flushToClearcut().catch((error) => {
@@ -130,9 +131,7 @@ export class ClearcutLogger {
     });
   }
 
-  async flushToClearcut(): Promise<LogResponse> {
   flushToClearcut(): Promise<LogResponse> {
-
     if (this.config?.getDebugMode()) {
       console.log('Flushing log events to Clearcut.');
     }
