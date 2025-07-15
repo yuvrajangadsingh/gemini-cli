@@ -48,7 +48,6 @@ export class ClearcutLogger {
   private flush_interval_ms: number = 1000 * 60; // Wait at least a minute before flushing events.
   private readonly max_events: number = 1000; // Maximum events to keep in memory
   private readonly max_retry_events: number = 100; // Maximum failed events to retry
-  private last_memory_warning: number = 0; // Last time we warned about memory usage
   private flushing: boolean = false; // Prevent concurrent flush operations
 
   private constructor(config?: Config) {
@@ -121,46 +120,12 @@ export class ClearcutLogger {
       return;
     }
 
-    // Check for potential memory pressure and warn if needed
-    this.checkMemoryPressure();
-
     // Fire and forget - don't await
     this.flushToClearcut().catch((error) => {
       console.debug('Error flushing to Clearcut:', error);
     });
   }
 
-  private checkMemoryPressure(): void {
-    const now = Date.now();
-    const memoryWarningInterval = 5 * 60 * 1000; // Warn at most every 5 minutes
-
-    if (now - this.last_memory_warning < memoryWarningInterval) {
-      return;
-    }
-
-    // Check event queue size
-    if (this.events.length > this.max_events * 0.8) {
-      console.warn(
-        `ClearcutLogger: Event queue is ${Math.round((this.events.length / this.max_events) * 100)}% full (${this.events.length}/${this.max_events}). Consider increasing flush frequency.`,
-      );
-      this.last_memory_warning = now;
-    }
-
-    // Check system memory if available
-    if (process.memoryUsage) {
-      const memUsage = process.memoryUsage();
-      const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
-      const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
-
-      if (heapUsedMB > 512) {
-        // Warn if heap usage exceeds 512MB
-        console.warn(
-          `ClearcutLogger: High memory usage detected - Heap: ${heapUsedMB}MB/${heapTotalMB}MB, RSS: ${Math.round(memUsage.rss / 1024 / 1024)}MB`,
-        );
-        this.last_memory_warning = now;
-      }
-    }
-  }
 
   async flushToClearcut(): Promise<LogResponse> {
     this.flushing = true;
