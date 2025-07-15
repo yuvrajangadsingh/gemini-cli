@@ -114,8 +114,11 @@ export class ClearcutLogger {
   }
 
   flushIfNeeded(): void {
+    this.flushing = true;
     if (
       this.flushing ||
+      Date.now() - this.last_flush_time < this.flush_interval_ms
+    ) {
       Date.now() - this.last_flush_time < this.flush_interval_ms
     ) {
       return;
