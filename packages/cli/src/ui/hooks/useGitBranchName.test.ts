@@ -9,7 +9,7 @@
  * While it would be beneficial to re-enable these tests to prevent regressions,
  * the current mocking setup with memfs makes it technically challenging to test
  * fs.watch behavior reliably. These functionalities are covered by integration tests.
- * 
+ *
  * TODO: Consider using a different mocking strategy or real file system tests
  * in a temp directory to properly test watcher functionality.
  */
@@ -92,18 +92,23 @@ describe('useGitBranchName', () => {
   it('should return undefined if git command fails', async () => {
     (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
       (_command, _options, callback) => {
-        setTimeout(() => callback?.(new Error('Git error'), '', 'error output'), 0);
+        setTimeout(
+          () => callback?.(new Error('Git error'), '', 'error output'),
+          0,
+        );
         return new EventEmitter() as ChildProcess;
       },
     );
 
     const { result } = renderHook(() => useGitBranchName(CWD));
-    
+
     // Initial state should be undefined
     expect(result.current).toBeUndefined();
-    
+
     await waitFor(() => {
-      expect((mockExec as MockedFunction<typeof mockExec>).mock.calls).toHaveLength(1);
+      expect(
+        (mockExec as MockedFunction<typeof mockExec>).mock.calls,
+      ).toHaveLength(1);
     });
     expect(result.current).toBeUndefined();
   });
@@ -123,7 +128,7 @@ describe('useGitBranchName', () => {
     );
 
     const { result } = renderHook(() => useGitBranchName(CWD));
-    
+
     await waitFor(() => {
       expect(result.current).toBe('a1b2c3d');
     });
@@ -144,26 +149,30 @@ describe('useGitBranchName', () => {
     );
 
     const { result } = renderHook(() => useGitBranchName(CWD));
-    
+
     await waitFor(() => {
-      expect((mockExec as MockedFunction<typeof mockExec>).mock.calls).toHaveLength(2);
+      expect(
+        (mockExec as MockedFunction<typeof mockExec>).mock.calls,
+      ).toHaveLength(2);
     });
     expect(result.current).toBeUndefined();
   });
 
   it.skip('should update branch name when .git/logs/HEAD changes', async () => {
-    // SKIP REASON: memfs doesn't properly support fs.watch and the async nature of 
-    // setupWatcher in the hook makes it difficult to mock reliably. The watcher 
+    // SKIP REASON: memfs doesn't properly support fs.watch and the async nature of
+    // setupWatcher in the hook makes it difficult to mock reliably. The watcher
     // functionality is indirectly tested through integration tests.
     // Override fs.watch for this test
     let watchCallback: ((eventType: string) => void) | undefined;
     const originalWatch = fs.watch;
-    const watchMock = vi.fn((_path: string, callback: any) => {
-      watchCallback = callback as (eventType: string) => void;
-      return {
-        close: vi.fn(),
-      } as unknown as FSWatcher;
-    });
+    const watchMock = vi.fn(
+      (_path: string, callback: (eventType: string) => void) => {
+        watchCallback = callback as (eventType: string) => void;
+        return {
+          close: vi.fn(),
+        } as unknown as FSWatcher;
+      },
+    );
     Object.defineProperty(fs, 'watch', {
       value: watchMock,
       writable: true,
@@ -173,7 +182,12 @@ describe('useGitBranchName', () => {
     let callCount = 0;
     (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
       (_command, _options, callback) => {
-        const branchName = callCount === 0 ? 'main\n' : callCount === 1 ? 'develop\n' : 'feature\n';
+        const branchName =
+          callCount === 0
+            ? 'main\n'
+            : callCount === 1
+              ? 'develop\n'
+              : 'feature\n';
         callCount++;
         setTimeout(() => callback?.(null, branchName, ''), 0);
         return new EventEmitter() as ChildProcess;
@@ -189,9 +203,12 @@ describe('useGitBranchName', () => {
 
     // Wait for the watcher to be set up
     await waitFor(() => {
-      expect(watchMock).toHaveBeenCalledWith(GIT_LOGS_HEAD_PATH, expect.any(Function));
+      expect(watchMock).toHaveBeenCalledWith(
+        GIT_LOGS_HEAD_PATH,
+        expect.any(Function),
+      );
     });
-    
+
     expect(watchCallback).toBeDefined();
 
     // Trigger a change event
@@ -255,25 +272,31 @@ describe('useGitBranchName', () => {
 
     // Since watcher setup failed, manually triggering file changes won't update branch
     // Wait to ensure no unexpected updates
-    await waitFor(() => {
-      // Use a small timeout just to ensure no state changes occur
-      expect(result.current).toBe('main');
-    }, { timeout: 100 });
+    await waitFor(
+      () => {
+        // Use a small timeout just to ensure no state changes occur
+        expect(result.current).toBe('main');
+      },
+      { timeout: 100 },
+    );
 
     // Branch name should remain 'main' because watcher setup failed
     expect(result.current).toBe('main');
   });
 
   it.skip('should cleanup watcher on unmount', async () => {
-    // SKIP REASON: memfs doesn't properly support fs.watch and the async nature of 
-    // setupWatcher in the hook makes it difficult to mock reliably. The cleanup 
+    // SKIP REASON: memfs doesn't properly support fs.watch and the async nature of
+    // setupWatcher in the hook makes it difficult to mock reliably. The cleanup
     // functionality is indirectly tested through integration tests.
     // Override fs.watch for this test
     const closeMock = vi.fn();
     const originalWatch = fs.watch;
-    const watchMock = vi.fn((_path: string, _callback: any) => ({
-      close: closeMock,
-    } as unknown as FSWatcher));
+    const watchMock = vi.fn(
+      (_path: string, _callback: (eventType: string) => void) =>
+        ({
+          close: closeMock,
+        }) as unknown as FSWatcher,
+    );
     Object.defineProperty(fs, 'watch', {
       value: watchMock,
       writable: true,
@@ -296,7 +319,10 @@ describe('useGitBranchName', () => {
 
     // Wait for the watcher to be set up
     await waitFor(() => {
-      expect(watchMock).toHaveBeenCalledWith(GIT_LOGS_HEAD_PATH, expect.any(Function));
+      expect(watchMock).toHaveBeenCalledWith(
+        GIT_LOGS_HEAD_PATH,
+        expect.any(Function),
+      );
     });
 
     // Unmount and verify cleanup
