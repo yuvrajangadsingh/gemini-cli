@@ -6,6 +6,7 @@
 
 import { Buffer } from 'buffer';
 import * as https from 'https';
+import { FixedDeque } from 'mnemonist';
 import {
   StartSessionEvent,
   EndSessionEvent,
@@ -46,7 +47,7 @@ export class ClearcutLogger {
   private static instance: ClearcutLogger;
   private config?: Config;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Clearcut expects this format.
-  private readonly events: any = [];
+  private readonly events: FixedDeque<any>;
   private last_flush_time: number = Date.now();
   private flush_interval_ms: number = 1000 * 60; // Wait at least a minute before flushing events.
   private readonly max_events: number = 1000; // Maximum events to keep in memory
@@ -55,6 +56,7 @@ export class ClearcutLogger {
 
   private constructor(config?: Config) {
     this.config = config;
+    this.events = new FixedDeque(Array, this.max_events);
   }
 
   static getInstance(config?: Config): ClearcutLogger | undefined {
@@ -68,25 +70,21 @@ export class ClearcutLogger {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Clearcut expects this format.
   enqueueLogEvent(event: any): void {
-    // Prevent unbounded memory growth by limiting event queue size
-    if (this.events.length >= this.max_events) {
-      // Remove oldest events (FIFO) to make room for new ones
-      const eventsToRemove = this.events.length - this.max_events + 1;
-      this.events.splice(0, eventsToRemove);
-
-      if (this.config?.getDebugMode()) {
-        console.debug(
-          `ClearcutLogger: Dropped ${eventsToRemove} old events to prevent memory leak (queue size: ${this.events.length})`,
-        );
-      }
-    }
-
+    // FixedDeque automatically handles overflow by removing oldest elements (FIFO)
+    const wasAtCapacity = this.events.size >= this.max_events;
+    
     this.events.push([
       {
         event_time_ms: Date.now(),
         source_extension_json: safeJsonStringify(event),
       },
     ]);
+
+    if (wasAtCapacity && this.config?.getDebugMode()) {
+      console.debug(
+        `ClearcutLogger: Dropped old event to prevent memory leak (queue size: ${this.events.size})`,
+      );
+    }
   }
 
   createLogEvent(name: string, data: object[]): object {
@@ -136,8 +134,8 @@ export class ClearcutLogger {
     if (this.config?.getDebugMode()) {
       console.log('Flushing log events to Clearcut.');
     }
-    const eventsToSend = [...this.events];
-    this.events.length = 0;
+    const eventsToSend = this.events.toArray();
+    this.events.clear();
 
     return new Promise<Buffer>((resolve, reject) => {
       const request = [
@@ -167,18 +165,17 @@ export class ClearcutLogger {
         }
         // Add the events back to the front of the queue to be retried, but limit retry queue size
         const eventsToRetry = eventsToSend.slice(-this.max_retry_events); // Keep only the most recent events
-        this.events.unshift(...eventsToRetry);
+        
+        // Add retry events to the front of the deque (O(1) operations)
+        // Since FixedDeque has a capacity limit, it will automatically handle overflow
+        for (let i = eventsToRetry.length - 1; i >= 0; i--) {
+          this.events.unshift(eventsToRetry[i]);
+        }
 
-        // Prevent total queue from exceeding max_events after retry
-        if (this.events.length > this.max_events) {
-          const excessEvents = this.events.length - this.max_events;
-          this.events.splice(eventsToRetry.length, excessEvents);
-
-          if (this.config?.getDebugMode()) {
-            console.debug(
-              `ClearcutLogger: Dropped ${excessEvents} events after failed retry to prevent memory leak`,
-            );
-          }
+        if (this.config?.getDebugMode()) {
+          console.debug(
+            `ClearcutLogger: Re-queued ${eventsToRetry.length} events for retry (queue size: ${this.events.size})`,
+          );
         }
 
         reject(e);
