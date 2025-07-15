@@ -168,22 +168,20 @@ export class ClearcutLogger {
         const eventsToRetry = eventsToSend.slice(-this.max_retry_events); // Keep only the most recent events
 
         // Add retry events to the front of the deque (O(1) operations)
-        // Since FixedDeque.unshift throws on overflow, we must manually manage capacity
+        // If the queue is full, unshift will throw, and we'll stop requeueing.
         for (let i = eventsToRetry.length - 1; i >= 0; i--) {
           try {
-            if (this.events.size >= this.max_events) {
-              this.events.pop(); // Make space by removing the newest event from the end
-            }
             this.events.unshift(eventsToRetry[i]);
           } catch (e) {
-            // This can happen in a race condition with enqueueLogEvent.
-            // We'll log it and drop the event to prevent crashing the retry loop.
+            // This can happen if the queue is full, possibly due to a race condition with enqueueLogEvent.
+            // We'll log it and drop the remaining retry events to prevent crashing the retry loop.
             if (this.config?.getDebugMode()) {
               console.debug(
-                'ClearcutLogger: Dropped retry event due to race condition on full queue.',
+                `ClearcutLogger: Dropping ${i + 1} retry events due to full queue.`,
                 e,
               );
             }
+            break;
           }
         }
 
