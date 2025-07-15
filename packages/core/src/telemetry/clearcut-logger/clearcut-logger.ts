@@ -73,12 +73,10 @@ export class ClearcutLogger {
     // FixedDeque automatically handles overflow by removing oldest elements (FIFO)
     const wasAtCapacity = this.events.size >= this.max_events;
 
-    this.events.push([
-      {
-        event_time_ms: Date.now(),
-        source_extension_json: safeJsonStringify(event),
-      },
-    ]);
+    this.events.push({
+      event_time_ms: Date.now(),
+      source_extension_json: safeJsonStringify(event),
+    });
 
     if (wasAtCapacity && this.config?.getDebugMode()) {
       console.debug(
@@ -114,24 +112,23 @@ export class ClearcutLogger {
   }
 
   flushIfNeeded(): void {
-    if (
-      this.flushing ||
-      Date.now() - this.last_flush_time < this.flush_interval_ms
-    ) {
+    if (Date.now() - this.last_flush_time < this.flush_interval_ms) {
       return;
     }
 
-    // Set the flag before initiating the async flush operation
-    // to prevent concurrent calls from starting another flush
-    this.flushing = true;
-
     // Fire and forget - don't await
-    this.flushToClearcut().finally(() => {
-      this.flushing = false;
-    });
+    this.flushToClearcut();
   }
 
   flushToClearcut(): Promise<LogResponse> {
+    if (this.flushing) {
+      if (this.config?.getDebugMode()) {
+        console.debug('ClearcutLogger: Flush already in progress, skipping.');
+      }
+      return Promise.resolve({});
+    }
+    this.flushing = true;
+
     if (this.config?.getDebugMode()) {
       console.log('Flushing log events to Clearcut.');
     }
@@ -209,6 +206,9 @@ export class ClearcutLogger {
         console.error('Error flushing log events:', error);
         // Return empty response to maintain the Promise<LogResponse> contract
         return {};
+      })
+      .finally(() => {
+        this.flushing = false;
       });
   }
 
