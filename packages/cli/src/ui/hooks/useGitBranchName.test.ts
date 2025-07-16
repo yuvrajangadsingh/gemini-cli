@@ -440,12 +440,11 @@ describe.skip('useGitBranchName with real file system', () => {
   });
 
   it('should cleanup watcher on unmount', async () => {
-    (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
-      (_command, _options, callback) => {
-        setTimeout(() => callback?.(null, 'main\n', ''), 0);
-        return new EventEmitter() as ChildProcess;
-      },
-    );
+    const execMock = mockExec as MockedFunction<typeof mockExec>;
+    execMock.mockImplementation((_command, _options, callback) => {
+      setTimeout(() => callback?.(null, 'main\n', ''), 0);
+      return new EventEmitter() as ChildProcess;
+    });
 
     const { result, unmount } = renderHook(() => useGitBranchName(tempDir));
 
@@ -453,6 +452,7 @@ describe.skip('useGitBranchName with real file system', () => {
     await waitFor(() => {
       expect(result.current).toBe('main');
     });
+    expect(execMock).toHaveBeenCalledTimes(1);
 
     // Give the watcher time to set up
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -460,23 +460,13 @@ describe.skip('useGitBranchName with real file system', () => {
     // Unmount the hook
     unmount();
 
-    // Try to modify the file after unmount
-    let callCount = 0;
-    (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
-      (_command, _options, callback) => {
-        callCount++;
-        setTimeout(() => callback?.(null, 'develop\n', ''), 0);
-        return new EventEmitter() as ChildProcess;
-      },
-    );
-
-    // Append to the file
+    // Append to the file to trigger the watcher, if it's still active
     realFs.appendFileSync(gitLogsHeadPath, '\nanother log entry');
 
     // Wait a bit to ensure no update happens
     await new Promise((resolve) => setTimeout(resolve, 200));
 
-    // The exec should not have been called again
-    expect(callCount).toBe(0);
+    // The exec call count should not have increased
+    expect(execMock).toHaveBeenCalledTimes(1);
   });
 });
