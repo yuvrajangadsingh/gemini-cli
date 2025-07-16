@@ -26,10 +26,11 @@ import {
 import { act } from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useGitBranchName } from './useGitBranchName.js';
-import { fs, vol } from 'memfs'; // For mocking fs
+import { vol } from 'memfs'; // For mocking fs
+import * as nodeFs from 'node:fs'; // Import the actual fs module that the hook uses
+import * as nodeFsPromises from 'node:fs/promises'; // Import fs/promises to spy on access
 import { EventEmitter } from 'node:events';
 import { exec as mockExec, type ChildProcess } from 'node:child_process';
-import type { FSWatcher } from 'memfs/lib/volume.js';
 
 // Mock child_process
 vi.mock('child_process');
@@ -155,25 +156,31 @@ describe('useGitBranchName', () => {
   });
 
   it.skip('should update branch name when .git/logs/HEAD changes', async () => {
-    // SKIP REASON: memfs doesn't properly support fs.watch and the async nature of
-    // setupWatcher in the hook makes it difficult to mock reliably. The watcher
-    // functionality is indirectly tested through integration tests.
-    // Override fs.watch for this test
-    let watchCallback: ((eventType: string) => void) | undefined;
-    const originalWatch = fs.watch;
-    const watchMock = vi.fn(
-      (_path: string, callback: (eventType: string) => void) => {
-        watchCallback = callback as (eventType: string) => void;
-        return {
-          close: vi.fn(),
-        } as unknown as FSWatcher;
-      },
-    );
-    Object.defineProperty(fs, 'watch', {
-      value: watchMock,
-      writable: true,
-      configurable: true,
-    });
+    // SKIP REASON: The fs.watch functionality has been fixed to mock the correct module,
+    // but the async nature of setupWatcher in the hook still makes it challenging to test reliably
+    // in a unit test environment. The watcher functionality is covered by integration tests.
+    // Set up fs.watch spy on the correct module
+    let watchCallback:
+      | ((eventType: string, filename?: string) => void)
+      | undefined;
+    const watchSpy = vi
+      .spyOn(nodeFs, 'watch')
+      .mockImplementation(
+        (_path: nodeFs.PathLike, callback?: nodeFs.WatchListener<string>) => {
+          watchCallback = callback as (
+            eventType: string,
+            filename?: string,
+          ) => void;
+          return {
+            close: vi.fn(),
+          } as unknown as nodeFs.FSWatcher;
+        },
+      );
+
+    // Spy on fsPromises.access to see if it's being called and what happens
+    const accessSpy = vi
+      .spyOn(nodeFsPromises, 'access')
+      .mockResolvedValue(undefined);
 
     let callCount = 0;
     (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
@@ -197,13 +204,16 @@ describe('useGitBranchName', () => {
       expect(result.current).toBe('main');
     });
 
-    // Wait for the watcher to be set up
-    await waitFor(() => {
-      expect(watchMock).toHaveBeenCalledWith(
-        GIT_LOGS_HEAD_PATH,
-        expect.any(Function),
-      );
-    });
+    // Wait for the watcher to be set up (with longer timeout for async setup)
+    await waitFor(
+      () => {
+        expect(watchSpy).toHaveBeenCalledWith(
+          GIT_LOGS_HEAD_PATH,
+          expect.any(Function),
+        );
+      },
+      { timeout: 3000 },
+    );
 
     expect(watchCallback).toBeDefined();
 
@@ -227,12 +237,9 @@ describe('useGitBranchName', () => {
       expect(result.current).toBe('feature');
     });
 
-    // Restore original fs.watch
-    Object.defineProperty(fs, 'watch', {
-      value: originalWatch,
-      writable: true,
-      configurable: true,
-    });
+    // Restore the spies
+    watchSpy.mockRestore();
+    accessSpy.mockRestore();
   });
 
   it('should handle watcher setup error silently', async () => {
@@ -279,23 +286,22 @@ describe('useGitBranchName', () => {
   });
 
   it.skip('should cleanup watcher on unmount', async () => {
-    // SKIP REASON: memfs doesn't properly support fs.watch and the async nature of
-    // setupWatcher in the hook makes it difficult to mock reliably. The cleanup
-    // functionality is indirectly tested through integration tests.
-    // Override fs.watch for this test
+    // SKIP REASON: The fs.watch functionality has been fixed to mock the correct module,
+    // but the async nature of setupWatcher in the hook still makes it challenging to test reliably
+    // in a unit test environment. The cleanup functionality is covered by integration tests.
+    // Set up fs.watch spy on the correct module
     const closeMock = vi.fn();
-    const originalWatch = fs.watch;
-    const watchMock = vi.fn(
-      (_path: string, _callback: (eventType: string) => void) =>
+    const watchSpy = vi.spyOn(nodeFs, 'watch').mockImplementation(
+      (_path: nodeFs.PathLike, _callback?: nodeFs.WatchListener<string>) =>
         ({
           close: closeMock,
-        }) as unknown as FSWatcher,
+        }) as unknown as nodeFs.FSWatcher,
     );
-    Object.defineProperty(fs, 'watch', {
-      value: watchMock,
-      writable: true,
-      configurable: true,
-    });
+
+    // Spy on fsPromises.access to ensure it resolves
+    const accessSpy = vi
+      .spyOn(nodeFsPromises, 'access')
+      .mockResolvedValue(undefined);
 
     (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
       (_command, _options, callback) => {
@@ -311,23 +317,23 @@ describe('useGitBranchName', () => {
       expect(result.current).toBe('main');
     });
 
-    // Wait for the watcher to be set up
-    await waitFor(() => {
-      expect(watchMock).toHaveBeenCalledWith(
-        GIT_LOGS_HEAD_PATH,
-        expect.any(Function),
-      );
-    });
+    // Wait for the watcher to be set up (with longer timeout for async setup)
+    await waitFor(
+      () => {
+        expect(watchSpy).toHaveBeenCalledWith(
+          GIT_LOGS_HEAD_PATH,
+          expect.any(Function),
+        );
+      },
+      { timeout: 3000 },
+    );
 
     // Unmount and verify cleanup
     unmount();
     expect(closeMock).toHaveBeenCalledTimes(1);
 
-    // Restore original fs.watch
-    Object.defineProperty(fs, 'watch', {
-      value: originalWatch,
-      writable: true,
-      configurable: true,
-    });
+    // Restore the spies
+    watchSpy.mockRestore();
+    accessSpy.mockRestore();
   });
 });
