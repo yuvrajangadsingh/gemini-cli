@@ -277,23 +277,13 @@ describe('useGitBranchName', () => {
       expect(result.current).toBe('main');
     });
 
-    // Mock exec to return a different branch name
-    (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
-      (_command, _options, callback) => {
-        setTimeout(() => callback?.(null, 'develop\n', ''), 0);
-        return new EventEmitter() as ChildProcess;
-      },
-    );
-
-    // Since the watcher setup failed (file doesn't exist), any file system changes
-    // won't trigger branch name updates. The hook should silently continue working
-    // with the initial branch name.
-
-    // Wait a bit to ensure no update happens
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // The branch name should remain 'main' since the watcher couldn't be set up
+    // Since the watcher setup failed, we assert that the branch name is still
+    // fetched initially but no further updates will occur.
+    // The `exec` mock should only have been called once.
     expect(result.current).toBe('main');
+    expect(
+      (mockExec as MockedFunction<typeof mockExec>).mock.calls,
+    ).toHaveLength(1);
   });
 
   it('should work correctly when .git/logs/HEAD exists in filesystem', async () => {
