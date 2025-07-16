@@ -70,8 +70,12 @@ export class ClearcutLogger {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Clearcut expects this format.
   enqueueLogEvent(event: any): void {
-    // FixedDeque automatically handles overflow by removing oldest elements (FIFO)
+    // Manually handle overflow for FixedDeque, which throws when full.
     const wasAtCapacity = this.events.size >= this.max_events;
+
+    if (wasAtCapacity) {
+      this.events.shift(); // Evict oldest element to make space.
+    }
 
     this.events.push([
       {
