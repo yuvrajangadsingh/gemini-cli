@@ -362,9 +362,15 @@ describe('useGitBranchName', () => {
 
 // Tests using real file system for fs.watch functionality
 describe.skip('useGitBranchName with real file system', () => {
-  // SKIP REASON: These tests require unmocking the fs module which conflicts
-  // with the memfs setup used by other tests in the suite. The fs.watch
-  // functionality is covered by integration tests.
+  // SKIP REASON: These tests have a fundamental correctness issue as identified by gemini-code-assist.
+  // The global vi.mock('node:fs') at the top of the file applies to all tests, including these.
+  // This means the hook will use the mocked fs (memfs + spied functions) instead of the real file system.
+  // 
+  // TO FIX: Add vi.unmock('node:fs') and vi.unmock('node:fs/promises') at the start of this describe block,
+  // then use vi.resetModules() to ensure the hook module is re-imported with the real fs modules.
+  // Finally, restore the mocks in an afterAll block to avoid affecting other tests.
+  // 
+  // The fs.watch functionality is covered by integration tests.
 
   let tempDir: string;
   let gitLogsHeadPath: string;
