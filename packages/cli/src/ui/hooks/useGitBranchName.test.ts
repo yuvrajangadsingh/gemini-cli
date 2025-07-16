@@ -48,11 +48,7 @@ vi.mock('node:fs', async () => {
 
 vi.mock('node:fs/promises', async () => {
   const memfs = await vi.importActual<typeof import('memfs')>('memfs');
-  return {
-    ...memfs.fs.promises,
-    // Mock access to always succeed for watcher tests
-    access: vi.fn().mockResolvedValue(undefined),
-  };
+  return memfs.fs.promises;
 });
 
 const CWD = '/test/project';
@@ -270,17 +266,15 @@ describe('useGitBranchName', () => {
       [GIT_LOGS_HEAD_PATH]: 'new log entry',
     });
 
-    // Since watcher setup failed, manually triggering file changes won't update branch
-    // Wait to ensure no unexpected updates
-    await waitFor(
-      () => {
-        // Use a small timeout just to ensure no state changes occur
-        expect(result.current).toBe('main');
-      },
-      { timeout: 100 },
-    );
+    // Since watcher setup failed, an update to 'develop' should not happen.
+    // We can assert that waiting for this state change times out.
+    await expect(
+      waitFor(() => expect(result.current).toBe('develop'), {
+        timeout: 100,
+      }),
+    ).rejects.toThrow();
 
-    // Branch name should remain 'main' because watcher setup failed
+    // The branch name should remain 'main'.
     expect(result.current).toBe('main');
   });
 
