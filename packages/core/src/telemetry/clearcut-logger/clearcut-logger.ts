@@ -170,18 +170,23 @@ export class ClearcutLogger {
         // Add the events back to the front of the queue to be retried, but limit retry queue size
         const eventsToRetry = eventsToSend.slice(-this.max_retry_events); // Keep only the most recent events
 
-        // Add retry events to the front of the deque (O(1) operations)
-        // If the queue is full, unshift will throw, and we'll stop requeueing.
-        for (let i = eventsToRetry.length - 1; i >= 0; i--) {
-          try {
+        // Add retry events to the front of the deque, but only if there's space
+        // Check available space first to avoid race conditions
+        const availableSpace = this.max_events - this.events.size;
+        const eventsToRequeue = Math.min(eventsToRetry.length, availableSpace);
+
+        // If we can't fit all retry events, prioritize the most recent ones
+        const startIndex = Math.max(0, eventsToRetry.length - eventsToRequeue);
+
+        for (let i = eventsToRetry.length - 1; i >= startIndex; i--) {
+          // Double-check we still have space (in case of concurrent enqueueLogEvent calls)
+          if (this.events.size < this.max_events) {
             this.events.unshift(eventsToRetry[i]);
-          } catch (e) {
-            // This can happen if the queue is full, possibly due to a race condition with enqueueLogEvent.
-            // We'll log it and drop the remaining retry events to prevent crashing the retry loop.
+          } else {
+            // Queue became full during retry - log and stop
             if (this.config?.getDebugMode()) {
               console.debug(
-                `ClearcutLogger: Dropping ${i + 1} retry events due to full queue.`,
-                e,
+                `ClearcutLogger: Queue became full during retry, dropping ${i - startIndex + 1} remaining events.`,
               );
             }
             break;
@@ -189,8 +194,9 @@ export class ClearcutLogger {
         }
 
         if (this.config?.getDebugMode()) {
+          const actualRequeued = eventsToRetry.length - startIndex;
           console.debug(
-            `ClearcutLogger: Re-queued ${eventsToRetry.length} events for retry (queue size: ${this.events.size})`,
+            `ClearcutLogger: Re-queued ${actualRequeued} events for retry (queue size: ${this.events.size})`,
           );
         }
 
