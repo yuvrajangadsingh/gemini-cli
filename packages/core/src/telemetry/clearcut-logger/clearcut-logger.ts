@@ -59,6 +59,7 @@ export class ClearcutLogger {
   private readonly max_events: number = 1000; // Maximum events to keep in memory
   private readonly max_retry_events: number = 100; // Maximum failed events to retry
   private flushing: boolean = false; // Prevent concurrent flush operations
+  private pendingFlush: boolean = false; // Track if a flush was requested during an ongoing flush
 
   private constructor(config?: Config) {
     this.config = config;
@@ -143,8 +144,9 @@ export class ClearcutLogger {
   flushToClearcut(): Promise<LogResponse> {
     if (this.flushing) {
       if (this.config?.getDebugMode()) {
-        console.debug('ClearcutLogger: Flush already in progress, skipping.');
+        console.debug('ClearcutLogger: Flush already in progress, marking pending flush.');
       }
+      this.pendingFlush = true;
       return Promise.resolve({});
     }
     this.flushing = true;
@@ -236,6 +238,17 @@ export class ClearcutLogger {
       })
       .finally(() => {
         this.flushing = false;
+        
+        // If a flush was requested while we were flushing, flush again
+        if (this.pendingFlush) {
+          this.pendingFlush = false;
+          // Fire and forget the pending flush
+          this.flushToClearcut().catch((error) => {
+            if (this.config?.getDebugMode()) {
+              console.debug('Error in pending flush to Clearcut:', error);
+            }
+          });
+        }
       });
   }
 
