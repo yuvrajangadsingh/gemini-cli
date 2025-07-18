@@ -5,13 +5,12 @@
  */
 
 import { FunctionDeclaration, Schema, Type } from '@google/genai';
-import { Tool, ToolResult, BaseTool } from './tools.js';
+import { Tool, ToolResult, BaseTool, Icon } from './tools.js';
 import { Config } from '../config/config.js';
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { discoverMcpTools } from './mcp-client.js';
 import { DiscoveredMCPTool } from './mcp-tool.js';
-import { defaultSummarizer } from '../utils/summarizer.js';
 import { parse } from 'shell-quote';
 
 type ToolParams = Record<string, unknown>;
@@ -45,10 +44,10 @@ Signal: Signal number or \`(none)\` if no signal was received.
       name,
       name,
       description,
+      Icon.Hammer,
       parameterSchema,
       false, // isOutputMarkdown
       false, // canUpdateOutput
-      defaultSummarizer,
     );
   }
 
@@ -166,6 +165,7 @@ export class ToolRegistry {
       this.config.getMcpServers() ?? {},
       this.config.getMcpServerCommand(),
       this,
+      this.config.getDebugMode(),
     );
   }
 
@@ -309,7 +309,9 @@ export class ToolRegistry {
    * Returns an array of all registered and discovered tool instances.
    */
   getAllTools(): Tool[] {
-    return Array.from(this.tools.values());
+    return Array.from(this.tools.values()).sort((a, b) =>
+      a.displayName.localeCompare(b.displayName),
+    );
   }
 
   /**
@@ -322,7 +324,7 @@ export class ToolRegistry {
         serverTools.push(tool);
       }
     }
-    return serverTools;
+    return serverTools.sort((a, b) => a.name.localeCompare(b.name));
   }
 
   /**
