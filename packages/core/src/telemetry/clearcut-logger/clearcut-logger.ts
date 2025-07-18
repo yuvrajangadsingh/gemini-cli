@@ -76,24 +76,30 @@ export class ClearcutLogger {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Clearcut expects this format.
   enqueueLogEvent(event: any): void {
-    // Manually handle overflow for FixedDeque, which throws when full.
-    const wasAtCapacity = this.events.size >= this.max_events;
+    try {
+      // Manually handle overflow for FixedDeque, which throws when full.
+      const wasAtCapacity = this.events.size >= this.max_events;
 
-    if (wasAtCapacity) {
-      this.events.shift(); // Evict oldest element to make space.
-    }
+      if (wasAtCapacity) {
+        this.events.shift(); // Evict oldest element to make space.
+      }
 
-    this.events.push([
-      {
-        event_time_ms: Date.now(),
-        source_extension_json: safeJsonStringify(event),
-      },
-    ]);
+      this.events.push([
+        {
+          event_time_ms: Date.now(),
+          source_extension_json: safeJsonStringify(event),
+        },
+      ]);
 
-    if (wasAtCapacity && this.config?.getDebugMode()) {
-      console.debug(
-        `ClearcutLogger: Dropped old event to prevent memory leak (queue size: ${this.events.size})`,
-      );
+      if (wasAtCapacity && this.config?.getDebugMode()) {
+        console.debug(
+          `ClearcutLogger: Dropped old event to prevent memory leak (queue size: ${this.events.size})`,
+        );
+      }
+    } catch (error) {
+      if (this.config?.getDebugMode()) {
+        console.error('ClearcutLogger: Failed to enqueue log event.', error);
+      }
     }
   }
 
