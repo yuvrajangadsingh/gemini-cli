@@ -68,7 +68,7 @@ export class GitService {
       env: {
         HOME: repoDir,
         XDG_CONFIG_HOME: repoDir,
-      }
+      },
     });
     const isRepoDefined = await repo.checkIsRepo(CheckRepoActions.IS_REPO_ROOT);
 
