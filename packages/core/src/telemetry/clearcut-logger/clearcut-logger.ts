@@ -144,7 +144,9 @@ export class ClearcutLogger {
   flushToClearcut(): Promise<LogResponse> {
     if (this.flushing) {
       if (this.config?.getDebugMode()) {
-        console.debug('ClearcutLogger: Flush already in progress, marking pending flush.');
+        console.debug(
+          'ClearcutLogger: Flush already in progress, marking pending flush.',
+        );
       }
       this.pendingFlush = true;
       return Promise.resolve({});
@@ -238,7 +240,7 @@ export class ClearcutLogger {
       })
       .finally(() => {
         this.flushing = false;
-        
+
         // If a flush was requested while we were flushing, flush again
         if (this.pendingFlush) {
           this.pendingFlush = false;
@@ -255,9 +257,12 @@ export class ClearcutLogger {
   private requeueFailedEvents(eventsToSend: LogEventEntry[][]): void {
     // Add the events back to the front of the queue to be retried, but limit retry queue size
     const eventsToRetry = eventsToSend.slice(-this.max_retry_events); // Keep only the most recent events
-    
+
     // Log a warning if we're dropping events
-    if (eventsToSend.length > this.max_retry_events && this.config?.getDebugMode()) {
+    if (
+      eventsToSend.length > this.max_retry_events &&
+      this.config?.getDebugMode()
+    ) {
       console.warn(
         `ClearcutLogger: Dropping ${eventsToSend.length - this.max_retry_events} events due to retry queue limit. Total events: ${eventsToSend.length}, keeping: ${this.max_retry_events}`,
       );
