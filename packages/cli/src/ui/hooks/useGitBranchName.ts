@@ -55,12 +55,12 @@ export function useGitBranchName(cwd: string): string | undefined {
       try {
         // Check if .git/logs/HEAD exists, as it might not in a new repo or orphaned head
         await fsPromises.access(gitLogsHeadPath, fs.constants.F_OK);
-        
+
         // Check if the component has been unmounted while we were awaiting
         if (isCancelled) {
           return;
         }
-        
+
         watcher = fs.watch(gitLogsHeadPath, (eventType: string) => {
           // Changes to .git/logs/HEAD (appends) indicate HEAD has likely changed
           if (eventType === 'change' || eventType === 'rename') {

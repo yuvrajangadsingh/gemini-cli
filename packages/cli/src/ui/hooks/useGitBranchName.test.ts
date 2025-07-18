@@ -311,7 +311,7 @@ describe('useGitBranchName', () => {
     // SKIP REASON: While fs.watch is now spying on the correct module (node:fs),
     // the mocked file system (memfs) doesn't fully support the events that fs.watch emits
     // on a real file system. This discrepancy can lead to unreliable test results.
-    // NOTE: The race condition in useGitBranchName (identified by gemini-code-assist) 
+    // NOTE: The race condition in useGitBranchName (identified by gemini-code-assist)
     // where the watcher could be created after unmount has been fixed with a cancellation flag.
     // Set up fs.watch spy on the correct module
     const closeMock = vi.fn();
@@ -358,4 +358,3 @@ describe('useGitBranchName', () => {
     watchSpy.mockRestore();
   });
 });
-
