@@ -254,19 +254,8 @@ export class ClearcutLogger {
 
     let requeuedCount = 0;
     for (let i = eventsToRetry.length - 1; i >= startIndex; i--) {
-      // Double-check we still have space (in case of concurrent enqueueLogEvent calls)
-      if (this.events.size < this.max_events) {
-        this.events.unshift(eventsToRetry[i]);
-        requeuedCount++;
-      } else {
-        // Queue became full during retry - log and stop
-        if (this.config?.getDebugMode()) {
-          console.debug(
-            `ClearcutLogger: Queue became full during retry, dropping ${i - startIndex + 1} remaining events.`,
-          );
-        }
-        break;
-      }
+      this.events.unshift(eventsToRetry[i]);
+      requeuedCount++;
     }
 
     if (this.config?.getDebugMode()) {
