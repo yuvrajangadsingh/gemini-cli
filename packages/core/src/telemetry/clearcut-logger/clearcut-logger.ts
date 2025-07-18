@@ -252,17 +252,9 @@ export class ClearcutLogger {
     const startIndex = Math.max(0, eventsToRetry.length - eventsToRequeue);
 
     let requeuedCount = 0;
-    try {
-      for (let i = eventsToRetry.length - 1; i >= startIndex; i--) {
-        this.events.unshift(eventsToRetry[i]);
-        requeuedCount++;
-      }
-    } catch (error) {
-      if (this.config?.getDebugMode()) {
-        console.debug(
-          'ClearcutLogger: Failed to re-queue some events due to capacity limits.',
-        );
-      }
+    for (let i = eventsToRetry.length - 1; i >= startIndex; i--) {
+      this.events.unshift(eventsToRetry[i]);
+      requeuedCount++;
     }
 
     if (this.config?.getDebugMode()) {
