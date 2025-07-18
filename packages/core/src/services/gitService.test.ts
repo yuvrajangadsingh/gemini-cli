@@ -193,12 +193,13 @@ describe('GitService', () => {
       const service = new GitService(mockProjectRoot);
       await service.setupShadowGitRepository();
 
-      // Verify that simpleGit was called with the repo directory and isolation settings
-      expect(hoistedMockSimpleGit).toHaveBeenCalledWith(repoDir, {
-        env: {
-          HOME: repoDir,
-          XDG_CONFIG_HOME: repoDir,
-        },
+      // Verify that simpleGit was called with the repo directory
+      expect(hoistedMockSimpleGit).toHaveBeenCalledWith(repoDir);
+
+      // Verify that env() was called with the isolation settings
+      expect(hoistedMockEnv).toHaveBeenCalledWith({
+        HOME: repoDir,
+        XDG_CONFIG_HOME: repoDir,
       });
 
       // Verify that subsequent git operations used the isolated instance
@@ -219,11 +220,10 @@ describe('GitService', () => {
       hoistedMockCheckIsRepo.mockResolvedValue(false);
       const service = new GitService(mockProjectRoot);
       await service.setupShadowGitRepository();
-      expect(hoistedMockSimpleGit).toHaveBeenCalledWith(repoDir, {
-        env: {
-          HOME: repoDir,
-          XDG_CONFIG_HOME: repoDir,
-        },
+      expect(hoistedMockSimpleGit).toHaveBeenCalledWith(repoDir);
+      expect(hoistedMockEnv).toHaveBeenCalledWith({
+        HOME: repoDir,
+        XDG_CONFIG_HOME: repoDir,
       });
       expect(hoistedMockInit).toHaveBeenCalled();
     });
