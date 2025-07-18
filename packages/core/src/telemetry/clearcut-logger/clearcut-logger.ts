@@ -43,13 +43,17 @@ export interface LogResponse {
   nextRequestWaitMs?: number;
 }
 
+interface LogEventEntry {
+  event_time_ms: number;
+  source_extension_json: string;
+}
+
 // Singleton class for batch posting log events to Clearcut. When a new event comes in, the elapsed time
 // is checked and events are flushed to Clearcut if at least a minute has passed since the last flush.
 export class ClearcutLogger {
   private static instance: ClearcutLogger;
   private config?: Config;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Clearcut expects this format.
-  private readonly events: FixedDeque<any>;
+  private readonly events: FixedDeque<LogEventEntry[]>;
   private last_flush_time: number = Date.now();
   private flush_interval_ms: number = 1000 * 60; // Wait at least a minute before flushing events.
   private readonly max_events: number = 1000; // Maximum events to keep in memory
@@ -58,7 +62,7 @@ export class ClearcutLogger {
 
   private constructor(config?: Config) {
     this.config = config;
-    this.events = new FixedDeque(Array, this.max_events);
+    this.events = new FixedDeque<LogEventEntry[]>(Array, this.max_events);
   }
 
   static getInstance(config?: Config): ClearcutLogger | undefined {
@@ -140,96 +144,117 @@ export class ClearcutLogger {
     if (this.config?.getDebugMode()) {
       console.log('Flushing log events to Clearcut.');
     }
-    const eventsToSend = this.events.toArray();
+    const eventsToSend = this.events.toArray() as LogEventEntry[][];
     this.events.clear();
 
-    return new Promise<Buffer>((resolve, reject) => {
-      const request = [
-        {
-          log_source_name: 'CONCORD',
-          request_time_ms: Date.now(),
-          log_event: eventsToSend,
-        },
-      ];
-      const body = safeJsonStringify(request);
-      const options = {
-        hostname: 'play.googleapis.com',
-        path: '/log',
-        method: 'POST',
-        headers: { 'Content-Length': Buffer.byteLength(body) },
-      };
-      const bufs: Buffer[] = [];
-      const req = https.request(
-        {
-          ...options,
-          agent: this.getProxyAgent(),
-        },
-        (res) => {
-          res.on('data', (buf) => bufs.push(buf));
-          res.on('end', () => {
-            resolve(Buffer.concat(bufs));
-          });
-        },
-      );
-      req.on('error', (e) => {
-        if (this.config?.getDebugMode()) {
-          console.log('Clearcut POST request error: ', e);
-        }
-        // Add the events back to the front of the queue to be retried, but limit retry queue size
-        const eventsToRetry = eventsToSend.slice(-this.max_retry_events); // Keep only the most recent events
-
-        // Add retry events to the front of the deque, but only if there's space
-        // Check available space first to avoid race conditions
-        const availableSpace = this.max_events - this.events.size;
-        const eventsToRequeue = Math.min(eventsToRetry.length, availableSpace);
-
-        // If we can't fit all retry events, prioritize the most recent ones
-        const startIndex = Math.max(0, eventsToRetry.length - eventsToRequeue);
-
-        for (let i = eventsToRetry.length - 1; i >= startIndex; i--) {
-          // Double-check we still have space (in case of concurrent enqueueLogEvent calls)
-          if (this.events.size < this.max_events) {
-            this.events.unshift(eventsToRetry[i]);
-          } else {
-            // Queue became full during retry - log and stop
-            if (this.config?.getDebugMode()) {
-              console.debug(
-                `ClearcutLogger: Queue became full during retry, dropping ${i - startIndex + 1} remaining events.`,
-              );
-            }
-            break;
-          }
-        }
-
-        if (this.config?.getDebugMode()) {
-          const actualRequeued = eventsToRetry.length - startIndex;
-          console.debug(
-            `ClearcutLogger: Re-queued ${actualRequeued} events for retry (queue size: ${this.events.size})`,
-          );
-        }
-
-        reject(e);
-      });
-      req.end(body);
-    })
-      .then((buf: Buffer) => {
+    return new Promise<{ buffer: Buffer; statusCode?: number }>(
+      (resolve, reject) => {
+        const request = [
+          {
+            log_source_name: 'CONCORD',
+            request_time_ms: Date.now(),
+            log_event: eventsToSend,
+          },
+        ];
+        const body = safeJsonStringify(request);
+        const options = {
+          hostname: 'play.googleapis.com',
+          path: '/log',
+          method: 'POST',
+          headers: { 'Content-Length': Buffer.byteLength(body) },
+        };
+        const bufs: Buffer[] = [];
+        const req = https.request(
+          {
+            ...options,
+            agent: this.getProxyAgent(),
+          },
+          (res) => {
+            res.on('data', (buf) => bufs.push(buf));
+            res.on('end', () => {
+              const buffer = Buffer.concat(bufs);
+              // Check if we got a successful response
+              if (
+                res.statusCode &&
+                res.statusCode >= 200 &&
+                res.statusCode < 300
+              ) {
+                resolve({ buffer, statusCode: res.statusCode });
+              } else {
+                // HTTP error - reject with status code for retry handling
+                reject(
+                  new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`),
+                );
+              }
+            });
+          },
+        );
+        req.on('error', (e) => {
+          // Network-level error
+          reject(e);
+        });
+        req.end(body);
+      },
+    )
+      .then(({ buffer }) => {
         try {
           this.last_flush_time = Date.now();
-          return this.decodeLogResponse(buf) || {};
+          return this.decodeLogResponse(buffer) || {};
         } catch (error: unknown) {
-          console.error('Error flushing log events:', error);
+          console.error('Error decoding log response:', error);
           return {};
         }
       })
       .catch((error: unknown) => {
-        // Handle all errors to prevent unhandled promise rejections
-        console.error('Error flushing log events:', error);
+        // Handle both network-level and HTTP-level errors
+        if (this.config?.getDebugMode()) {
+          console.error('Error flushing log events:', error);
+        }
+
+        // Re-queue failed events for retry
+        this.requeueFailedEvents(eventsToSend);
+
         // Return empty response to maintain the Promise<LogResponse> contract
         return {};
       })
       .finally(() => {
         this.flushing = false;
       });
+  }
+
+  private requeueFailedEvents(eventsToSend: LogEventEntry[][]): void {
+    // Add the events back to the front of the queue to be retried, but limit retry queue size
+    const eventsToRetry = eventsToSend.slice(-this.max_retry_events); // Keep only the most recent events
+
+    // Add retry events to the front of the deque, but only if there's space
+    // Check available space first to avoid race conditions
+    const availableSpace = this.max_events - this.events.size;
+    const eventsToRequeue = Math.min(eventsToRetry.length, availableSpace);
+
+    // If we can't fit all retry events, prioritize the most recent ones
+    const startIndex = Math.max(0, eventsToRetry.length - eventsToRequeue);
+
+    for (let i = eventsToRetry.length - 1; i >= startIndex; i--) {
+      // Double-check we still have space (in case of concurrent enqueueLogEvent calls)
+      if (this.events.size < this.max_events) {
+        this.events.unshift(eventsToRetry[i]);
+      } else {
+        // Queue became full during retry - log and stop
+        if (this.config?.getDebugMode()) {
+          console.debug(
+            `ClearcutLogger: Queue became full during retry, dropping ${i - startIndex + 1} remaining events.`,
+          );
+        }
+        break;
+      }
+    }
+
+    if (this.config?.getDebugMode()) {
+      const actualRequeued = eventsToRetry.length - startIndex;
+      console.debug(
+        `ClearcutLogger: Re-queued ${actualRequeued} events for retry (queue size: ${this.events.size})`,
+      );
+    }
   }
 
   // Visible for testing. Decodes protobuf-encoded response from Clearcut server.
