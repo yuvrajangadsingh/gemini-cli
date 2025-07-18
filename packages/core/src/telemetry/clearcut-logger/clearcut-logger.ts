@@ -208,8 +208,7 @@ export class ClearcutLogger {
           reject(e);
         });
         req.on('timeout', () => {
-          req.destroy();
-          reject(new Error('Request timeout after 30 seconds'));
+          req.destroy(new Error('Request timeout after 30 seconds'));
         });
         req.end(body);
       },
