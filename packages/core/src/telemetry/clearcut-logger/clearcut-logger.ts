@@ -208,8 +208,7 @@ export class ClearcutLogger {
           reject(e);
         });
         req.on('timeout', () => {
-          req.destroy();
-          reject(new Error('Request timeout after 30 seconds'));
+          req.destroy(new Error('Request timeout after 30 seconds'));
         });
         req.end(body);
       },
@@ -253,9 +252,17 @@ export class ClearcutLogger {
     const startIndex = Math.max(0, eventsToRetry.length - eventsToRequeue);
 
     let requeuedCount = 0;
-    for (let i = eventsToRetry.length - 1; i >= startIndex; i--) {
-      this.events.unshift(eventsToRetry[i]);
-      requeuedCount++;
+    try {
+      for (let i = eventsToRetry.length - 1; i >= startIndex; i--) {
+        this.events.unshift(eventsToRetry[i]);
+        requeuedCount++;
+      }
+    } catch (error) {
+      if (this.config?.getDebugMode()) {
+        console.debug(
+          'ClearcutLogger: Failed to re-queue some events due to capacity limits.',
+        );
+      }
     }
 
     if (this.config?.getDebugMode()) {
