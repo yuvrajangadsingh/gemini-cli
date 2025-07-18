@@ -176,19 +176,23 @@ export class ClearcutLogger {
             res.on('error', reject); // Handle stream errors
             res.on('data', (buf) => bufs.push(buf));
             res.on('end', () => {
-              const buffer = Buffer.concat(bufs);
-              // Check if we got a successful response
-              if (
-                res.statusCode &&
-                res.statusCode >= 200 &&
-                res.statusCode < 300
-              ) {
-                resolve({ buffer, statusCode: res.statusCode });
-              } else {
-                // HTTP error - reject with status code for retry handling
-                reject(
-                  new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`),
-                );
+              try {
+                const buffer = Buffer.concat(bufs);
+                // Check if we got a successful response
+                if (
+                  res.statusCode &&
+                  res.statusCode >= 200 &&
+                  res.statusCode < 300
+                ) {
+                  resolve({ buffer, statusCode: res.statusCode });
+                } else {
+                  // HTTP error - reject with status code for retry handling
+                  reject(
+                    new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`),
+                  );
+                }
+              } catch (e) {
+                reject(e);
               }
             });
           },
