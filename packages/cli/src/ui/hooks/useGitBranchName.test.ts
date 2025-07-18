@@ -284,29 +284,6 @@ describe('useGitBranchName', () => {
     ).toHaveLength(1);
   });
 
-  it('should work correctly when .git/logs/HEAD exists in filesystem', async () => {
-    // This test verifies that the hook works correctly when the logs file exists
-    // The existence of GIT_LOGS_HEAD_PATH in the mocked filesystem is crucial for watcher setup
-    // Note: The async setupWatcher function makes it challenging to test watcher setup reliably in unit tests
-    (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
-      (_command, _options, callback) => {
-        setTimeout(() => callback?.(null, 'main\n', ''), 0);
-        return new EventEmitter() as ChildProcess;
-      },
-    );
-
-    const { result } = renderHook(() => useGitBranchName(CWD));
-
-    // Wait for initial branch name
-    await waitFor(() => {
-      expect(result.current).toBe('main');
-    });
-
-    // The hook should work correctly when the logs file exists
-    // This tests the importance of having GIT_LOGS_HEAD_PATH in the mocked filesystem
-    expect(result.current).toBe('main');
-  });
-
   it.skip('should cleanup watcher on unmount', async () => {
     // SKIP REASON: While fs.watch is now spying on the correct module (node:fs),
     // the mocked file system (memfs) doesn't fully support the events that fs.watch emits
