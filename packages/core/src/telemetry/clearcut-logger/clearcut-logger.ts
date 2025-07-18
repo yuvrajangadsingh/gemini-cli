@@ -129,7 +129,9 @@ export class ClearcutLogger {
     }
 
     // Fire and forget - don't await
-    this.flushToClearcut();
+    this.flushToClearcut().catch((error) => {
+      console.debug('Error flushing to Clearcut:', error);
+    });
   }
 
   flushToClearcut(): Promise<LogResponse> {
