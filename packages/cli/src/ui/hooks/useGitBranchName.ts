@@ -16,7 +16,7 @@ export function useGitBranchName(cwd: string): string | undefined {
 
   const fetchBranchName = useCallback(() => {
     const currentRequestId = ++requestCounterRef.current;
-    
+
     exec(
       'git rev-parse --abbrev-ref HEAD',
       { cwd },
@@ -25,7 +25,7 @@ export function useGitBranchName(cwd: string): string | undefined {
         if (currentRequestId !== requestCounterRef.current) {
           return;
         }
-        
+
         if (error) {
           setBranchName(undefined);
           return;
@@ -42,7 +42,7 @@ export function useGitBranchName(cwd: string): string | undefined {
               if (currentRequestId !== requestCounterRef.current) {
                 return;
               }
-              
+
               if (error) {
                 setBranchName(undefined);
                 return;
