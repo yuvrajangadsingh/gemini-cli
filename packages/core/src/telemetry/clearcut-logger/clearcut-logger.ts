@@ -162,6 +162,7 @@ export class ClearcutLogger {
           path: '/log',
           method: 'POST',
           headers: { 'Content-Length': Buffer.byteLength(body) },
+          timeout: 30000, // 30-second timeout
         };
         const bufs: Buffer[] = [];
         const req = https.request(
@@ -193,6 +194,10 @@ export class ClearcutLogger {
         req.on('error', (e) => {
           // Network-level error
           reject(e);
+        });
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error('Request timeout after 30 seconds'));
         });
         req.end(body);
       },
