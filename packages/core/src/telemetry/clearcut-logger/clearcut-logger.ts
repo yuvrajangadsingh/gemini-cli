@@ -255,6 +255,13 @@ export class ClearcutLogger {
   private requeueFailedEvents(eventsToSend: LogEventEntry[][]): void {
     // Add the events back to the front of the queue to be retried, but limit retry queue size
     const eventsToRetry = eventsToSend.slice(-this.max_retry_events); // Keep only the most recent events
+    
+    // Log a warning if we're dropping events
+    if (eventsToSend.length > this.max_retry_events && this.config?.getDebugMode()) {
+      console.warn(
+        `ClearcutLogger: Dropping ${eventsToSend.length - this.max_retry_events} events due to retry queue limit. Total events: ${eventsToSend.length}, keeping: ${this.max_retry_events}`,
+      );
+    }
 
     // Add retry events to the front of the deque, but only if there's space
     // Check available space first to avoid race conditions
