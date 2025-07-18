@@ -170,6 +170,7 @@ export class ClearcutLogger {
             agent: this.getProxyAgent(),
           },
           (res) => {
+            res.on('error', reject); // Handle stream errors
             res.on('data', (buf) => bufs.push(buf));
             res.on('end', () => {
               const buffer = Buffer.concat(bufs);
