@@ -341,7 +341,7 @@ describe('Background Tools', () => {
 
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     expect(listSpy).not.toHaveBeenCalled();
-  });
+  }, 2000);
 
   it.each([[{}], [{ delay_ms: 0 }], [{ delay_ms: 60_000 }]])(
     'read_background_output should reject without reading when the signal is already aborted (%o)',
@@ -358,5 +358,6 @@ describe('Background Tools', () => {
       ).rejects.toMatchObject({ name: 'AbortError' });
       expect(listSpy).not.toHaveBeenCalled();
     },
+    2000,
   );
 });
