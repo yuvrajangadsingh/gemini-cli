@@ -394,5 +394,21 @@ describe('Background Tools', () => {
       expect(llmContent).toContain('é'.repeat(32_767));
       expect(llmContent).not.toContain('\uFFFD');
     });
+
+    it.each(['中', '😀'])(
+      'does not decode a %s split by the cap at any byte offset',
+      async (char) => {
+        // Trailing "a"s shift where the 64KB window starts within a character
+        for (let shift = 0; shift < Buffer.byteLength(char); shift++) {
+          const llmContent = await readLog(
+            77005,
+            char.repeat(30_000) + 'a'.repeat(shift) + '\n',
+          );
+
+          expect(llmContent).toContain(char.repeat(10_000));
+          expect(llmContent).not.toContain('\uFFFD');
+        }
+      },
+    );
   });
 });
